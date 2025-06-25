@@ -11,7 +11,7 @@ interface Appointment {
   attendees?: { email: string }[];
 }
 
-// Validate the input object shape at runtime
+// Runtime type check for Appointment
 function isAppointment(obj: any): obj is Appointment {
   return (
     obj &&
@@ -58,8 +58,23 @@ async function scheduleAppointment({
   return response.json();
 }
 
-export default {
+// Durable Object class
+export class MyMCP {
+  state: DurableObjectState;
+  env: any;
+  constructor(state: DurableObjectState, env: any) {
+    this.state = state;
+    this.env = env;
+  }
+  // Example stub handler
   async fetch(request: Request): Promise<Response> {
+    return new Response("Hello from MyMCP Durable Object!");
+  }
+}
+
+// Main Worker fetch handler
+export default {
+  async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
     if (
       request.method === "POST" &&
       new URL(request.url).pathname === "/api/schedule"
@@ -88,3 +103,6 @@ export default {
     return new Response("Not found", { status: 404 });
   }
 };
+
+// Export Durable Object for Wrangler
+export { MyMCP };
