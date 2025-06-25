@@ -1,81 +1,58 @@
-import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { McpAgent } from "agents/mcp";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import { AuthkitHandler } from "./authkit-handler";
-import type { Props } from "./props";
+// Cloudflare Worker-compatible Google Calendar appointment scheduling
 
-export class MyMCP extends McpAgent<Env, unknown, Props> {
-	server = new McpServer({
-		name: "MCP server demo using AuthKit",
-		version: "1.0.0",
-	});
+// For demo/testing only: hard-code a valid access token here
+const GOOGLE_CALENDAR_ACCESS_TOKEN = "YOUR_ACCESS_TOKEN";
 
-	async init() {
-		// Hello, world!
-		this.server.tool(
-			"add",
-			"Add two numbers the way only MCP can",
-			{ a: z.number(), b: z.number() },
-			async ({ a, b }) => ({
-				content: [{ type: "text", text: String(a + b) }],
-			})
-		);
+async function scheduleAppointment({
+  summary,
+  description,
+  startDateTime,
+  endDateTime,
+  attendees = [],
+}: {
+  summary: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+  attendees?: { email: string }[];
+}) {
+  const event = {
+    summary,
+    description,
+    start: { dateTime: startDateTime, timeZone: "UTC" },
+    end: { dateTime: endDateTime, timeZone: "UTC" },
+    attendees,
+  };
 
-		// Dynamically add tools based on the user's permissions. They must have the
-		// `image_generation` permission to use this tool.
-		if (this.props.permissions.includes("image_generation")) {
-			this.server.tool(
-				"generateImage",
-				"Generate an image using the `flux-1-schnell` model. Works best with 8 steps.",
-				{
-					prompt: z
-						.string()
-						.describe(
-							"A text description of the image you want to generate."
-						),
-					steps: z
-						.number()
-						.min(4)
-						.max(8)
-						.default(4)
-						.describe(
-							"The number of diffusion steps; higher values can improve quality but take longer. Must be between 4 and 8, inclusive."
-						),
-				},
-				async ({ prompt, steps }) => {
-					// TODO: Update the `McpAgent` type to pass its `Env` generic parameter
-					// down to the `DurableObject` type it extends to avoid this cast.
-					const env = this.env as Env;
+  const response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${GOOGLE_CALENDAR_ACCESS_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(event)
+  });
 
-					const response = await env.AI.run(
-						"@cf/black-forest-labs/flux-1-schnell",
-						{
-							prompt,
-							steps,
-						}
-					);
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Google Calendar API error: ${response.status} ${errorBody}`);
+  }
 
-					return {
-						content: [
-							{
-								type: "image",
-								data: response.image!,
-								mimeType: "image/jpeg",
-							},
-						],
-					};
-				}
-			);
-		}
-	}
+  return response.json();
 }
 
-export default new OAuthProvider({
-	apiRoute: "/sse",
-	apiHandler: MyMCP.mount("/sse") as any, // Use 'any' for maximum flexibility
-	defaultHandler: AuthkitHandler as any,  // Use 'any' for maximum flexibility 
-	authorizeEndpoint: "/authorize",
-	tokenEndpoint: "/token",
-	clientRegistrationEndpoint: "/register",
-});
+// Example Cloudflare Worker handler
+export default {
+  async fetch(request: Request): Promise<Response> {
+    if (request.method === "POST" && new URL(request.url).pathname === "/api/schedule") {
+      const data = await request.json();
+      try {
+        const event = await scheduleAppointment(data);
+        return new Response(JSON.stringify(event), { status: 200, headers: { "Content-Type": "application/json" } });
+      } catch (err: any) {
+        return new Response(err.message, { status: 500 });
+      }
+    }
+    return new Response("Not found", { status: 404 });
+  }
+};
