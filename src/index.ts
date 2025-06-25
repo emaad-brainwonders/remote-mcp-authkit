@@ -3,13 +3,27 @@
 // For demo/testing only: hard-code a valid access token here
 const GOOGLE_CALENDAR_ACCESS_TOKEN = "ya29.a0AS3H6NzNSiPe7tpYLv2nchRUENSvZOlp1x7Td1MwTfu9FXPVQ1UHyzEAHq1BEd4_8v_Sbxr6sbOVJJfiAgPvafHo5GRz8U5tbp-hIjXL_GkKIjdePWZX_swTRH6fh15i7IhnP7nZpk1lad-OD68RrsKSQzHkbRw6rZ7IiGfHaCgYKAd0SARQSFQHGX2Micdx1V7c7_XqqnQCMb4ve8Q0175";
 
-
 interface Appointment {
   summary: string;
   description?: string;
   startDateTime: string;
   endDateTime: string;
   attendees?: { email: string }[];
+}
+
+// Validate the input object shape at runtime
+function isAppointment(obj: any): obj is Appointment {
+  return (
+    obj &&
+    typeof obj.summary === "string" &&
+    typeof obj.startDateTime === "string" &&
+    typeof obj.endDateTime === "string" &&
+    (obj.attendees === undefined ||
+      (Array.isArray(obj.attendees) &&
+        obj.attendees.every(
+          (a: any) => a && typeof a.email === "string"
+        )))
+  );
 }
 
 async function scheduleAppointment({
@@ -44,20 +58,6 @@ async function scheduleAppointment({
   return response.json();
 }
 
-function isAppointment(obj: any): obj is Appointment {
-  return (
-    obj &&
-    typeof obj.summary === "string" &&
-    typeof obj.startDateTime === "string" &&
-    typeof obj.endDateTime === "string" &&
-    (obj.attendees === undefined ||
-      (Array.isArray(obj.attendees) &&
-        obj.attendees.every(
-          (a: any) => typeof a === "object" && typeof a.email === "string"
-        )))
-  );
-}
-
 export default {
   async fetch(request: Request): Promise<Response> {
     if (
@@ -86,5 +86,5 @@ export default {
       }
     }
     return new Response("Not found", { status: 404 });
-  },
+  }
 };
