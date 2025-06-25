@@ -28,7 +28,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 	});
 
 	async init() {
-		// Return only the current date in UTC (YYYY-MM-DD format)
+		// Only returns the current date in YYYY-MM-DD format (UTC)
 		this.server.tool(
 			"getCurrentDate",
 			"Get the current date in UTC (YYYY-MM-DD format)",
@@ -47,10 +47,10 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 			}
 		);
 
-		// Appointment scheduling tool now adds today's date in the event description
+		// Appointment scheduling tool now uses Asia/Kolkata timezone for India
 		this.server.tool(
 			"appointment",
-			"Schedule an appointment via Google Calendar (today's date is added to the event description)",
+			"Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone, and includes today's date in the description)",
 			{
 				summary: z.string(),
 				description: z.string().optional(),
@@ -78,8 +78,8 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 				const event = {
 					summary,
 					description: fullDescription,
-					start: { dateTime: startDateTime, timeZone: "UTC" },
-					end: { dateTime: endDateTime, timeZone: "UTC" },
+					start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
+					end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
 					attendees,
 				};
 
