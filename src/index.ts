@@ -9,7 +9,7 @@ type Env = { AI?: any };
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
 const HARDCODED_GOOGLE_ACCESS_TOKEN =
-  "ya29.a0AW4XtxgOsqTJjRvvd2rQ70StbfBeU5FZrKxv6abxCDZQWA2BFfmIK1svX0ssiTKwPO6o4ZBRz-BXxTxVxN6Q7EhQ0UR55eCXlAt56uYt3a5HtnBjmry3bOTo4L4pW458vDzGsgWhpd9uKLFja41oWhLjcZNOsfOk32mcIzEzaCgYKATMSARQSFQHGX2Mii1wxP6NcJHAKbvOkTaDwvg0175";
+  "ya29.a0AS3H6Nwd8BNjdv-iX0AB2Z2Mn4DSN5p99A039iEaS0fWr3Ew-_cdAMfRSrht1qRbRy9MWIaZgc5NRkKgK0FBRmN2A-oUq1KbCRh0Yqr1yFWn1w54RQNTlV5Lga6w8zaH6iVqWi5Ts-5pvksq3mZroiSNSWfY5--nLivGNUiHaCgYKAdUSARQSFQHGX2Mi_mIzzMiQcg6TgezV4OEnUw0175";
 
 // Helper: Format date to YYYY-MM-DD
 function formatDateToString(date: Date): string {
