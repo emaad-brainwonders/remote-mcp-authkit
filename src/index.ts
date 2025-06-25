@@ -8,7 +8,7 @@ interface Appointment {
   description?: string;
   startDateTime: string;
   endDateTime: string;
-  attendees?: { email: string }[]
+  attendees?: { email: string }[];
 }
 
 function isAppointment(obj: any): obj is Appointment {
