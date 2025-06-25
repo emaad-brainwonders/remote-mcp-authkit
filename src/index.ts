@@ -11,18 +11,6 @@ type Env = { AI?: any };
 const HARDCODED_GOOGLE_ACCESS_TOKEN =
   "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175";
 
-function formatDateToUTCString(date: Date): string {
-	const pad = (n: number) => n.toString().padStart(2, "0");
-	return (
-		`${date.getUTCFullYear()}-` +
-		`${pad(date.getUTCMonth() + 1)}-` +
-		`${pad(date.getUTCDate())} ` +
-		`${pad(date.getUTCHours())}:` +
-		`${pad(date.getUTCMinutes())}:` +
-		`${pad(date.getUTCSeconds())}`
-	);
-}
-
 export class MyMCP extends McpAgent<Env, unknown, Props> {
 	server = new McpServer({
 		name: "MCP server demo using AuthKit",
@@ -30,19 +18,19 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 	});
 
 	async init() {
-		// Fix: Returns current UTC date/time in 'YYYY-MM-DD HH:MM:SS' format
+		// Add a tool to get today's date and time (UTC)
 		this.server.tool(
 			"getCurrentDateTime",
-			"Get the current date and time in UTC (YYYY-MM-DD HH:MM:SS format)",
+			"Get the current date and time in UTC (ISO 8601 format)",
 			{},
 			async () => {
 				const now = new Date();
-				const formatted = formatDateToUTCString(now);
+				const isoString = now.toISOString();
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Current UTC date and time: ${formatted}`,
+							text: `Current UTC date and time: ${isoString}`,
 						},
 					],
 				};
