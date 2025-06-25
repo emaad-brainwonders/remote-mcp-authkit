@@ -3,6 +3,7 @@
 // Hardcoded access token (for demo/testing only; refresh with your backend if expired)
 const GOOGLE_CALENDAR_ACCESS_TOKEN = "ya29.a0AS3H6NzNSiPe7tpYLv2nchRUENSvZOlp1x7Td1MwTfu9FXPVQ1UHyzEAHq1BEd4_8v_Sbxr6sbOVJJfiAgPvafHo5GRz8U5tbp-hIjXL_GkKIjdePWZX_swTRH6fh15i7IhnP7nZpk1lad-OD68RrsKSQzHkbRw6rZ7IiGfHaCgYKAd0SARQSFQHGX2Micdx1V7c7_XqqnQCMb4ve8Q0175"; // Get this from your backend using refresh token
 
+
 export async function scheduleAppointment({
   summary,
   description,
@@ -12,8 +13,8 @@ export async function scheduleAppointment({
 }: {
   summary: string;
   description?: string;
-  startDateTime: string; // ISO string
-  endDateTime: string;   // ISO string
+  startDateTime: string;
+  endDateTime: string;
   attendees?: { email: string }[];
 }) {
   const event = {
@@ -41,7 +42,7 @@ export async function scheduleAppointment({
   return response.json();
 }
 
-// Example Cloudflare Worker route for appointment scheduling
+// Example Worker handler
 export default {
   async fetch(request: Request): Promise<Response> {
     if (request.method === "POST" && new URL(request.url).pathname === "/api/schedule") {
