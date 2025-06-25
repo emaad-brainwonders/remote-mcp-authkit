@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 type Env = {};
 type Props = {
   permissions: string[];
-  accessToken: string; // The Google OAuth access token should be provided in props
+  accessToken: string;
 };
 
 export class MyMCP extends McpAgent<Env, unknown, Props> {
@@ -27,11 +27,9 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
         accessToken: z.string().optional().describe("Google OAuth access token (optional, will use session token if omitted)"),
       },
       async ({ summary, description, startDateTime, endDateTime, attendees = [], accessToken }) => {
-        // Prefer provided accessToken, fall back to props
         const token = "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175"|| this.props.accessToken;
-        if (!token) {
-          throw new Error("Google OAuth access token is required.");
-        }
+        if (!token) throw new Error("Google OAuth access token is required.");
+
         const event = {
           summary,
           description,
