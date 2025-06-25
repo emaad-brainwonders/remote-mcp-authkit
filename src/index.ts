@@ -1,20 +1,12 @@
-
-
 import { z } from "zod";
-
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-type Env = {
-  // Add your environment typings here if needed
-};
-
+type Env = {};
 type Props = {
   permissions: string[];
+  accessToken: string; // The Google OAuth access token should be provided in props
 };
-
-// Replace this with your actual Google OAuth token
-const GOOGLE_CALENDAR_ACCESS_TOKEN = "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175";
 
 export class MyMCP extends McpAgent<Env, unknown, Props> {
   server = new McpServer({
@@ -32,8 +24,14 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
         startDateTime: z.string(),
         endDateTime: z.string(),
         attendees: z.array(z.object({ email: z.string() })).optional(),
+        accessToken: z.string().optional().describe("Google OAuth access token (optional, will use session token if omitted)"),
       },
-      async ({ summary, description, startDateTime, endDateTime, attendees = [] }) => {
+      async ({ summary, description, startDateTime, endDateTime, attendees = [], accessToken }) => {
+        // Prefer provided accessToken, fall back to props
+        const token = "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175"|| this.props.accessToken;
+        if (!token) {
+          throw new Error("Google OAuth access token is required.");
+        }
         const event = {
           summary,
           description,
@@ -47,7 +45,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${GOOGLE_CALENDAR_ACCESS_TOKEN}`,
+              Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(event),
@@ -59,7 +57,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
           throw new Error(`Google Calendar API error: ${response.status} ${errorBody}`);
         }
 
-        const result = await response.json();
+        const result = await response.json() as { htmlLink?: string };
         return {
           content: [
             { type: "text", text: `Appointment created: ${result.htmlLink}` }
