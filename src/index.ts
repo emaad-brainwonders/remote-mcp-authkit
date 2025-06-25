@@ -1,81 +1,53 @@
-import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { McpAgent } from "agents/mcp";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import { AuthkitHandler } from "./authkit-handler";
-import type { Props } from "./props";
+import { google } from 'googleapis';
 
-export class MyMCP extends McpAgent<Env, unknown, Props> {
-	server = new McpServer({
-		name: "MCP server demo using AuthKit",
-		version: "1.0.0",
-	});
+// QUICK TESTING: Hardcoded OAuth2 credentials (NOT FOR PRODUCTION)
+const oAuth2Client = new google.auth.OAuth2(
+  'calander@brw-emaad-test-apis.iam.gserviceaccount.com',    // client_id
+  '696145831054-rr1rgaq6gbe5fs3t0e431uqvcc3hj601.apps.googleusercontent.com',                            // client_secret
+  'https://remote-mcp-authkit.emaad-brainwonders.workers.dev/sse'                              // redirect_uri (can be unused for refresh_token)
+);
 
-	async init() {
-		// Hello, world!
-		this.server.tool(
-			"add",
-			"Add two numbers the way only MCP can",
-			{ a: z.number(), b: z.number() },
-			async ({ a, b }) => ({
-				content: [{ type: "text", text: String(a + b) }],
-			})
-		);
+// Hardcode refresh token for the Google account (for quick testing)
+oAuth2Client.setCredentials({
+  refresh_token: 'Y1//04dgfTTR74D6JCgYIARAAGAQSNwF-L9Ir8n5WqFfoOhxqrCLWewAsUI6pPaL75dYS1DLQuA6_3xCwDvA1aOgPWxUBJKr5LenrvPA',
+});
 
-		// Dynamically add tools based on the user's permissions. They must have the
-		// `image_generation` permission to use this tool.
-		if (this.props.permissions.includes("image_generation")) {
-			this.server.tool(
-				"generateImage",
-				"Generate an image using the `flux-1-schnell` model. Works best with 8 steps.",
-				{
-					prompt: z
-						.string()
-						.describe(
-							"A text description of the image you want to generate."
-						),
-					steps: z
-						.number()
-						.min(4)
-						.max(8)
-						.default(4)
-						.describe(
-							"The number of diffusion steps; higher values can improve quality but take longer. Must be between 4 and 8, inclusive."
-						),
-				},
-				async ({ prompt, steps }) => {
-					// TODO: Update the `McpAgent` type to pass its `Env` generic parameter
-					// down to the `DurableObject` type it extends to avoid this cast.
-					const env = this.env as Env;
+async function scheduleAppointment({
+  summary,
+  description,
+  startDateTime,
+  endDateTime,
+  attendees = [],
+}: {
+  summary: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+  attendees?: { email: string }[];
+}) {
+  const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
 
-					const response = await env.AI.run(
-						"@cf/black-forest-labs/flux-1-schnell",
-						{
-							prompt,
-							steps,
-						}
-					);
+  const event = {
+    summary,
+    description,
+    start: { dateTime: startDateTime },
+    end: { dateTime: endDateTime },
+    attendees,
+  };
 
-					return {
-						content: [
-							{
-								type: "image",
-								data: response.image!,
-								mimeType: "image/jpeg",
-							},
-						],
-					};
-				}
-			);
-		}
-	}
+  try {
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      requestBody: event,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error scheduling appointment:', error);
+    throw error;
+  }
 }
 
-export default new OAuthProvider({
-	apiRoute: "/sse",
-	apiHandler: MyMCP.mount("/sse") as any, // Use 'any' for maximum flexibility
-	defaultHandler: AuthkitHandler as any,  // Use 'any' for maximum flexibility 
-	authorizeEndpoint: "/authorize",
-	tokenEndpoint: "/token",
-	clientRegistrationEndpoint: "/register",
+// Register with your server/tool mechanism
+this.server.tool('scheduleAppointment', async (args: any) => {
+  return await scheduleAppointment(args);
 });
