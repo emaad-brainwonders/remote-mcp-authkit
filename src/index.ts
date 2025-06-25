@@ -2,10 +2,6 @@
 
 // For demo/testing only: hard-code a valid access token here
 const GOOGLE_CALENDAR_ACCESS_TOKEN = "ya29.a0AS3H6NzNSiPe7tpYLv2nchRUENSvZOlp1x7Td1MwTfu9FXPVQ1UHyzEAHq1BEd4_8v_Sbxr6sbOVJJfiAgPvafHo5GRz8U5tbp-hIjXL_GkKIjdePWZX_swTRH6fh15i7IhnP7nZpk1lad-OD68RrsKSQzHkbRw6rZ7IiGfHaCgYKAd0SARQSFQHGX2Micdx1V7c7_XqqnQCMb4ve8Q0175";
-// src/index.ts
-
-const GOOGLE_CALENDAR_ACCESS_TOKEN = "YOUR_ACCESS_TOKEN"; // Replace with your OAuth token
-
 interface Appointment {
   summary: string;
   description?: string;
