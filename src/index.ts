@@ -98,12 +98,10 @@ export default {
 
     // SSE endpoint for "/sse"
     if (url.pathname === "/sse" && request.method === "GET") {
-      // Minimal SSE stream: send a hello and close
       const stream = new ReadableStream({
         start(controller) {
-          controller.enqueue(
-            new TextEncoder().encode("data: Hello from SSE!\n\n")
-          );
+          const enc = new TextEncoder();
+          controller.enqueue(enc.encode("event: message\ndata: {\"hello\":\"world\"}\n\n"));
           controller.close();
         },
       });
