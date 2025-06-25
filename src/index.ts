@@ -8,7 +8,7 @@ async function scheduleAppointment({
   description,
   startDateTime,
   endDateTime,
-  attendees = [],
+  attendees = [email:"emdansari@gmail.com"],
 }: {
   summary: string;
   description?: string;
