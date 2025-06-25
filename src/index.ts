@@ -5,7 +5,7 @@ import { z } from "zod";
 import { AuthkitHandler } from "./authkit-handler";
 import type { Props } from "./props";
 
-type Env = { AI?: any }; // Add AI if you use it elsewhere in your MCP
+type Env = { AI?: any };
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
 const HARDCODED_GOOGLE_ACCESS_TOKEN =
@@ -18,6 +18,26 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 	});
 
 	async init() {
+		// Add a tool to get today's date and time (UTC)
+		this.server.tool(
+			"getCurrentDateTime",
+			"Get the current date and time in UTC (ISO 8601 format)",
+			{},
+			async () => {
+				const now = new Date();
+				const isoString = now.toISOString();
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Current UTC date and time: ${isoString}`,
+						},
+					],
+				};
+			}
+		);
+
+		// Main appointment scheduling tool
 		this.server.tool(
 			"appointment",
 			"Schedule an appointment via Google Calendar",
