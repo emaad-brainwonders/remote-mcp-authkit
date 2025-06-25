@@ -89,14 +89,40 @@ function withCors(resp: Response) {
 // --- Main Worker Handler ---
 export default {
   async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+
     // CORS preflight
     if (request.method === "OPTIONS") {
       return withCors(new Response(null, { status: 204 }));
     }
 
+    // SSE endpoint for "/sse"
+    if (url.pathname === "/sse" && request.method === "GET") {
+      // Minimal SSE stream: send a hello and close
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode("data: Hello from SSE!\n\n")
+          );
+          controller.close();
+        },
+      });
+      return withCors(
+        new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          },
+        })
+      );
+    }
+
+    // Google Calendar scheduling endpoint
     if (
       request.method === "POST" &&
-      new URL(request.url).pathname === "/api/schedule"
+      url.pathname === "/api/schedule"
     ) {
       let data: unknown;
       try {
