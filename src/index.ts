@@ -2,6 +2,9 @@
 
 // For demo/testing only: hard-code a valid access token here
 const GOOGLE_CALENDAR_ACCESS_TOKEN = "ya29.a0AS3H6NzNSiPe7tpYLv2nchRUENSvZOlp1x7Td1MwTfu9FXPVQ1UHyzEAHq1BEd4_8v_Sbxr6sbOVJJfiAgPvafHo5GRz8U5tbp-hIjXL_GkKIjdePWZX_swTRH6fh15i7IhnP7nZpk1lad-OD68RrsKSQzHkbRw6rZ7IiGfHaCgYKAd0SARQSFQHGX2Micdx1V7c7_XqqnQCMb4ve8Q0175";
+// src/index.ts
+
+const GOOGLE_CALENDAR_ACCESS_TOKEN = "YOUR_ACCESS_TOKEN"; // Replace with your OAuth token
 
 interface Appointment {
   summary: string;
@@ -11,7 +14,7 @@ interface Appointment {
   attendees?: { email: string }[];
 }
 
-// Runtime type check for Appointment
+// --- Runtime type check helper ---
 function isAppointment(obj: any): obj is Appointment {
   return (
     obj &&
@@ -26,6 +29,7 @@ function isAppointment(obj: any): obj is Appointment {
   );
 }
 
+// --- Google Calendar Integration ---
 async function scheduleAppointment({
   summary,
   description,
@@ -41,24 +45,29 @@ async function scheduleAppointment({
     attendees,
   };
 
-  const response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${GOOGLE_CALENDAR_ACCESS_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(event)
-  });
+  const response = await fetch(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${GOOGLE_CALENDAR_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(event),
+    }
+  );
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`Google Calendar API error: ${response.status} ${errorBody}`);
+    throw new Error(
+      `Google Calendar API error: ${response.status} ${errorBody}`
+    );
   }
 
   return response.json();
 }
 
-// Durable Object class
+// --- Durable Object Definition ---
 export class MyMCP {
   state: DurableObjectState;
   env: any;
@@ -66,13 +75,13 @@ export class MyMCP {
     this.state = state;
     this.env = env;
   }
-  // Example stub handler
   async fetch(request: Request): Promise<Response> {
+    // Example logic, replace with your own
     return new Response("Hello from MyMCP Durable Object!");
   }
 }
 
-// Main Worker fetch handler
+// --- Main Worker Handler ---
 export default {
   async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
     if (
@@ -101,8 +110,8 @@ export default {
       }
     }
     return new Response("Not found", { status: 404 });
-  }
+  },
 };
 
-// Export Durable Object for Wrangler
+// --- Durable Object export for Wrangler ---
 export { MyMCP };
