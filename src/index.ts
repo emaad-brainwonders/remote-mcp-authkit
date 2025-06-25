@@ -5,8 +5,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 type Env = {};
 type Props = {
   permissions: string[];
-  accessToken: string;
+  // accessToken can be provided via props, but we will use a hardcoded fallback as requested
+  accessToken?: string;
 };
+
+// --- WARNING ---
+// Never expose real Google API tokens in production code or public repositories!
+// For demonstration only, a hardcoded token is shown here.
+
+const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175";
 
 export class MyMCP extends McpAgent<Env, unknown, Props> {
   server = new McpServer({
@@ -27,7 +34,12 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
         accessToken: z.string().optional().describe("Google OAuth access token (optional, will use session token if omitted)"),
       },
       async ({ summary, description, startDateTime, endDateTime, attendees = [], accessToken }) => {
-        const token = "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175"|| this.props.accessToken;
+        // Priority: function argument > props > hardcoded fallback
+        const token =
+          accessToken ||
+          this.props.accessToken ||
+          HARDCODED_GOOGLE_ACCESS_TOKEN;
+
         if (!token) throw new Error("Google OAuth access token is required.");
 
         const event = {
