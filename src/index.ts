@@ -5,11 +5,11 @@ import { z } from "zod";
 import { AuthkitHandler } from "./authkit-handler";
 import type { Props } from "./props";
 
-type Env = { AI?: any };
+type Env = { AI?: any }; // Add AI if you use it elsewhere in your MCP
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
 const HARDCODED_GOOGLE_ACCESS_TOKEN =
-  "ya29.a0AW4XtxgOsqTJjRvvd2rQ70StbfBeU5FZrKxv6abxCDZQWA2BFfmIK1svX0ssiTKwPO6o4ZBRz-BXxTxVxN6Q7EhQ0UR55eCXlAt56uYt3a5HtnBjmry3bOTo4L4pW458vDzGsgWhpd9uKLFja41oWhLjcZNOsfOk32mcIzEzaCgYKATMSARQSFQHGX2Mii1wxP6NcJHAKbvOkTaDwvg0175";
+  "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175";
 
 export class MyMCP extends McpAgent<Env, unknown, Props> {
 	server = new McpServer({
@@ -18,40 +18,40 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 	});
 
 	async init() {
-		// Simpler: Required fields only. Attendees and description are optional.
 		this.server.tool(
 			"appointment",
 			"Schedule an appointment via Google Calendar",
 			{
 				summary: z.string(),
+				description: z.string().optional(),
 				startDateTime: z.string(),
 				endDateTime: z.string(),
-				description: z.string().optional(),
 				attendees: z.array(z.object({ email: z.string() })).optional(),
-				accessToken: z.string().optional(),
+				accessToken: z.string().optional().describe("Google OAuth access token (optional, will use session token if omitted)"),
 			},
 			async ({
 				summary,
+				description,
 				startDateTime,
 				endDateTime,
-				description,
 				attendees = [],
 				accessToken,
 			}) => {
-				// Pick token from: param, props, or hardcoded fallback.
-				const token = accessToken || this.props.accessToken || HARDCODED_GOOGLE_ACCESS_TOKEN;
+				const token =
+					accessToken ||
+					this.props.accessToken ||
+					HARDCODED_GOOGLE_ACCESS_TOKEN;
+
 				if (!token) throw new Error("Google OAuth access token is required.");
 
-				// Build event payload. Only include optional fields if provided.
-				const event: Record<string, any> = {
+				const event = {
 					summary,
+					description,
 					start: { dateTime: startDateTime, timeZone: "UTC" },
 					end: { dateTime: endDateTime, timeZone: "UTC" },
+					attendees,
 				};
-				if (description) event.description = description;
-				if (attendees.length) event.attendees = attendees;
 
-				// Send request to Google Calendar
 				const response = await fetch(
 					"https://www.googleapis.com/calendar/v3/calendars/primary/events",
 					{
@@ -66,17 +66,17 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 
 				if (!response.ok) {
 					const errorBody = await response.text();
-					throw new Error(`Google Calendar API error: ${response.status} ${errorBody}`);
+					throw new Error(
+						`Google Calendar API error: ${response.status} ${errorBody}`
+					);
 				}
 
-				const result = await response.json();
+				const result = (await response.json()) as { htmlLink?: string };
 				return {
 					content: [
 						{
 							type: "text",
-							text: result.htmlLink
-								? `Appointment created: ${result.htmlLink}`
-								: "Appointment created.",
+							text: `Appointment created: ${result.htmlLink}`,
 						},
 					],
 				};
