@@ -36,5 +36,10 @@
   },
   "dev": {
     "port": 8788
+  },
+  // Add your environment variables here
+  "vars": {
+    "WORKOS_CLIENT_ID": "client_01JYK402FD2XQ392316BY5RP1Q",
+    "GOOGLE_ACCESS_TOKEN": "ya29.a0AW4XtxgOsqTJjRvvd2rQ70StbfBeU5FZrKxv6abxCDZQWA2BFfmIK1svX0ssiTKwPO6o4ZBRz-BXxTxVxN6Q7EhQ0UR55eCXlAt56uYt3a5HtnBjmry3bOTo4L4pW458vDzGsgWhpd9uKLFja41oWhLjcZNOsfOk32mcIzEzaCgYKATMSARQSFQHGX2Mii1wxP6NcJHAKbvOkTaDwvg0175"
   }
 }
