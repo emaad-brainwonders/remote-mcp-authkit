@@ -8,6 +8,8 @@ import type { Props } from "./props";
 type Env = { 
 	AI?: any;
 	GOOGLE_ACCESS_TOKEN?: string;
+	WORKOS_CLIENT_ID?: string;
+	WORKOS_CLIENT_SECRET?: string;
 };
 
 // Helper: Format date to YYYY-MM-DD
@@ -66,10 +68,12 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 			}) => {
 				// Access the environment variable through this.env
 				const token = this.env.GOOGLE_ACCESS_TOKEN;
-
+				
 				const today = formatDateToString(new Date());
 
-				if (!token) throw new Error("Google OAuth access token is required.");
+				if (!token) {
+					throw new Error("Google OAuth access token is required.");
+				}
 
 				const fullDescription =
 					(description ? description + "\n" : "") +
@@ -83,34 +87,41 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 					attendees,
 				};
 
-				const response = await fetch(
-					"https://www.googleapis.com/calendar/v3/calendars/primary/events",
-					{
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${token}`,
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify(event),
-					}
-				);
+				try {
+					const response = await fetch(
+						"https://www.googleapis.com/calendar/v3/calendars/primary/events",
+						{
+							method: "POST",
+							headers: {
+								Authorization: `Bearer ${token}`,
+								"Content-Type": "application/json",
+							},
+							body: JSON.stringify(event),
+						}
+					);
 
-				if (!response.ok) {
-					const errorBody = await response.text();
+					if (!response.ok) {
+						const errorBody = await response.text();
+						throw new Error(
+							`Google Calendar API error: ${response.status} - ${errorBody}`
+						);
+					}
+
+					const result = (await response.json()) as { htmlLink?: string };
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Appointment created successfully: ${result.htmlLink || 'Calendar event created'}`,
+							},
+						],
+					};
+				} catch (error) {
+					console.error("Error creating calendar event:", error);
 					throw new Error(
-						`Google Calendar API error: ${response.status} ${errorBody}`
+						`Failed to create calendar event: ${error instanceof Error ? error.message : 'Unknown error'}`
 					);
 				}
-
-				const result = (await response.json()) as { htmlLink?: string };
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Appointment created: ${result.htmlLink}`,
-						},
-					],
-				};
 			}
 		);
 	}
