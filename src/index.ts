@@ -5,10 +5,11 @@ import { z } from "zod";
 import { AuthkitHandler } from "./authkit-handler";
 import type { Props } from "./props";
 
-type Env = { AI?: any };
+type Env = { 
+	AI?: any;
+	GOOGLE_ACCESS_TOKEN?: string;
+};
 
-// WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6Nwd8BNjdv-iX0AB2Z2Mn4DSN5p99A039iEaS0fWr3Ew-_cdAMfRSrht1qRbRy9MWIaZgc5NRkKgK0FBRmN2A-oUq1KbCRh0Yqr1yFWn1w54RQNTlV5Lga6w8zaH6iVqWi5Ts-5pvksq3mZroiSNSWfY5--nLivGNUiHaCgYKAdUSARQSFQHGX2Mi_mIzzMiQcg6TgezV4OEnUw0175";
 // Helper: Format date to YYYY-MM-DD
 function formatDateToString(date: Date): string {
 	const pad = (n: number) => n.toString().padStart(2, "0");
@@ -63,7 +64,8 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 				endDateTime,
 				attendees = [],
 			}) => {
-				const token = HARDCODED_GOOGLE_ACCESS_TOKEN;
+				// Access the environment variable through this.env
+				const token = this.env.GOOGLE_ACCESS_TOKEN;
 
 				const today = formatDateToString(new Date());
 
