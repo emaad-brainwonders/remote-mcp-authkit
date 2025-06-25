@@ -9,7 +9,17 @@ type Env = { AI?: any };
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
 const HARDCODED_GOOGLE_ACCESS_TOKEN =
-  "ya29.a0AW4XtxhHvSgt-iBP11GVTgdNNSa8XtFoM8oon5NVDAC99JfTP4hTlFRVFX7RyqLIQCjBhD1EUwAUHhLiCFNzbMCfcwX7zj2ESg-g56LXWL5HzJR2dqeurrBVnvc74Ttfpv8f18qQTzb_8VBrl-2l2avbN0ohIzQNElWtHF6faCgYKAQMSARQSFQHGX2MipHCB4eE3ERx1m_f52A5KEg0175";
+  "ya29.a0AW4XtxgOsqTJjRvvd2rQ70StbfBeU5FZrKxv6abxCDZQWA2BFfmIK1svX0ssiTKwPO6o4ZBRz-BXxTxVxN6Q7EhQ0UR55eCXlAt56uYt3a5HtnBjmry3bOTo4L4pW458vDzGsgWhpd9uKLFja41oWhLjcZNOsfOk32mcIzEzaCgYKATMSARQSFQHGX2Mii1wxP6NcJHAKbvOkTaDwvg0175";
+
+// Helper: Format date to YYYY-MM-DD
+function formatDateToString(date: Date): string {
+	const pad = (n: number) => n.toString().padStart(2, "0");
+	return (
+		`${date.getFullYear()}-` +
+		`${pad(date.getMonth() + 1)}-` +
+		`${pad(date.getDate())}`
+	);
+}
 
 export class MyMCP extends McpAgent<Env, unknown, Props> {
 	server = new McpServer({
@@ -18,36 +28,35 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 	});
 
 	async init() {
-		// Add a tool to get today's date and time (UTC)
+		// Only returns the current date in YYYY-MM-DD format (UTC)
 		this.server.tool(
-			"getCurrentDateTime",
-			"Get the current date and time in UTC (ISO 8601 format)",
+			"getCurrentDate",
+			"Get the current date in UTC (YYYY-MM-DD format)",
 			{},
 			async () => {
-				const now = new Date();
-				const isoString = now.toISOString();
+				const nowUTC = new Date();
+				const utcString = formatDateToString(nowUTC);
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Current UTC date and time: ${isoString}`,
+							text: `Current UTC date: ${utcString}`,
 						},
 					],
 				};
 			}
 		);
 
-		// Main appointment scheduling tool
+		// Appointment scheduling tool now adds today's date in the response
 		this.server.tool(
 			"appointment",
-			"Schedule an appointment via Google Calendar",
+			"Schedule an appointment via Google Calendar (includes today's date info)",
 			{
 				summary: z.string(),
 				description: z.string().optional(),
 				startDateTime: z.string(),
 				endDateTime: z.string(),
 				attendees: z.array(z.object({ email: z.string() })).optional(),
-				accessToken: z.string().optional().describe("Google OAuth access token (optional, will use session token if omitted)"),
 			},
 			async ({
 				summary,
@@ -55,12 +64,10 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 				startDateTime,
 				endDateTime,
 				attendees = [],
-				accessToken,
 			}) => {
-				const token =
-					accessToken ||
-					this.props.accessToken ||
-					HARDCODED_GOOGLE_ACCESS_TOKEN;
+				const token = HARDCODED_GOOGLE_ACCESS_TOKEN;
+
+				const today = formatDateToString(new Date());
 
 				if (!token) throw new Error("Google OAuth access token is required.");
 
@@ -96,7 +103,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 					content: [
 						{
 							type: "text",
-							text: `Appointment created: ${result.htmlLink}`,
+							text: `Appointment created: ${result.htmlLink}\nToday's date (UTC): ${today}`,
 						},
 					],
 				};
