@@ -28,7 +28,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 	});
 
 	async init() {
-		// Only returns the current date in YYYY-MM-DD format (UTC)
+		// Return only the current date in UTC (YYYY-MM-DD format)
 		this.server.tool(
 			"getCurrentDate",
 			"Get the current date in UTC (YYYY-MM-DD format)",
@@ -47,10 +47,10 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 			}
 		);
 
-		// Appointment scheduling tool now adds today's date in the response
+		// Appointment scheduling tool now adds today's date in the event description
 		this.server.tool(
 			"appointment",
-			"Schedule an appointment via Google Calendar (includes today's date info)",
+			"Schedule an appointment via Google Calendar (today's date is added to the event description)",
 			{
 				summary: z.string(),
 				description: z.string().optional(),
@@ -71,9 +71,13 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 
 				if (!token) throw new Error("Google OAuth access token is required.");
 
+				const fullDescription =
+					(description ? description + "\n" : "") +
+					`Scheduled on (UTC): ${today}`;
+
 				const event = {
 					summary,
-					description,
+					description: fullDescription,
 					start: { dateTime: startDateTime, timeZone: "UTC" },
 					end: { dateTime: endDateTime, timeZone: "UTC" },
 					attendees,
@@ -103,7 +107,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 					content: [
 						{
 							type: "text",
-							text: `Appointment created: ${result.htmlLink}\nToday's date (UTC): ${today}`,
+							text: `Appointment created: ${result.htmlLink}`,
 						},
 					],
 				};
