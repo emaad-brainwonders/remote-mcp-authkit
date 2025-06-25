@@ -8,7 +8,7 @@ async function scheduleAppointment({
   description,
   startDateTime,
   endDateTime,
-  attendees = [email:"emdansari@gmail.com"],
+  attendees = [],
 }: {
   summary: string;
   description?: string;
@@ -41,18 +41,33 @@ async function scheduleAppointment({
   return response.json();
 }
 
-// Example Cloudflare Worker handler
 export default {
   async fetch(request: Request): Promise<Response> {
-    if (request.method === "POST" && new URL(request.url).pathname === "/api/schedule") {
+    if (
+      request.method === "POST" &&
+      new URL(request.url).pathname === "/api/schedule"
+    ) {
       const data = await request.json();
+
+      // Type assertion for TypeScript compatibility
+      const appointment = data as {
+        summary: string;
+        description?: string;
+        startDateTime: string;
+        endDateTime: string;
+        attendees?: { email: string }[];
+      };
+
       try {
-        const event = await scheduleAppointment(data);
-        return new Response(JSON.stringify(event), { status: 200, headers: { "Content-Type": "application/json" } });
+        const event = await scheduleAppointment(appointment);
+        return new Response(JSON.stringify(event), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       } catch (err: any) {
         return new Response(err.message, { status: 500 });
       }
     }
     return new Response("Not found", { status: 404 });
-  }
+  },
 };
