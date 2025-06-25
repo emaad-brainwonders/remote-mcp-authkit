@@ -8,9 +8,7 @@ import type { Props } from "./props";
 type Env = { AI?: any };
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN =
-  "ya29.a0AW4XtxgOsqTJjRvvd2rQ70StbfBeU5FZrKxv6abxCDZQWA2BFfmIK1svX0ssiTKwPO6o4ZBRz-BXxTxVxN6Q7EhQ0UR55eCXlAt56uYt3a5HtnBjmry3bOTo4L4pW458vDzGsgWhpd9uKLFja41oWhLjcZNOsfOk32mcIzEzaCgYKATMSARQSFQHGX2Mii1wxP6NcJHAKbvOkTaDwvg0175";
-
+const HARDCODED_GOOGLE_ACCESS_TOKEN = env.GOOGLE_ACCESS_TOKEN;
 // Helper: Format date to YYYY-MM-DD
 function formatDateToString(date: Date): string {
 	const pad = (n: number) => n.toString().padStart(2, "0");
