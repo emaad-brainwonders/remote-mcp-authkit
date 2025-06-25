@@ -19,9 +19,7 @@ function isAppointment(obj: any): obj is Appointment {
     typeof obj.endDateTime === "string" &&
     (obj.attendees === undefined ||
       (Array.isArray(obj.attendees) &&
-        obj.attendees.every(
-          (a: any) => a && typeof a.email === "string"
-        )))
+        obj.attendees.every((a: any) => a && typeof a.email === "string")))
   );
 }
 
@@ -63,7 +61,6 @@ async function scheduleAppointment({
 }
 
 // --- Durable Object Definition ---
-// Only export this class ONCE, do not re-export below.
 export class MyMCP {
   state: DurableObjectState;
   env: any;
@@ -72,14 +69,31 @@ export class MyMCP {
     this.env = env;
   }
   async fetch(request: Request): Promise<Response> {
-    // Example logic, replace with your own
-    return new Response("Hello from MyMCP Durable Object!");
+    return withCors(new Response("Hello from MyMCP Durable Object!"));
   }
+}
+
+// --- Helper for CORS ---
+function withCors(resp: Response) {
+  const headers = new Headers(resp.headers);
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return new Response(resp.body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers,
+  });
 }
 
 // --- Main Worker Handler ---
 export default {
   async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
+    // CORS preflight
+    if (request.method === "OPTIONS") {
+      return withCors(new Response(null, { status: 204 }));
+    }
+
     if (
       request.method === "POST" &&
       new URL(request.url).pathname === "/api/schedule"
@@ -88,23 +102,26 @@ export default {
       try {
         data = await request.json();
       } catch {
-        return new Response("Invalid JSON", { status: 400 });
+        return withCors(new Response("Invalid JSON", { status: 400 }));
       }
 
       if (!isAppointment(data)) {
-        return new Response("Invalid appointment payload", { status: 400 });
+        return withCors(new Response("Invalid appointment payload", { status: 400 }));
       }
 
       try {
         const event = await scheduleAppointment(data);
-        return new Response(JSON.stringify(event), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+        return withCors(
+          new Response(JSON.stringify(event), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
       } catch (err: any) {
-        return new Response(err.message, { status: 500 });
+        return withCors(new Response(err.message, { status: 500 }));
       }
     }
-    return new Response("Not found", { status: 404 });
+
+    return withCors(new Response("Not found", { status: 404 }));
   },
 };
