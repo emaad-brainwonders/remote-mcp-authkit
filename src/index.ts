@@ -63,6 +63,7 @@ async function scheduleAppointment({
 }
 
 // --- Durable Object Definition ---
+// Only export this class ONCE, do not re-export below.
 export class MyMCP {
   state: DurableObjectState;
   env: any;
@@ -107,6 +108,3 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 };
-
-// --- Durable Object export for Wrangler ---
-export { MyMCP };
