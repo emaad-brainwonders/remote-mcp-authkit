@@ -1,18 +1,9 @@
-import { google } from 'googleapis';
+// This is a Cloudflare Worker-compatible Google Calendar appointment creator
 
-// QUICK TESTING: Hardcoded OAuth2 credentials (NOT FOR PRODUCTION)
-const oAuth2Client = new google.auth.OAuth2(
-  'calander@brw-emaad-test-apis.iam.gserviceaccount.com',    // client_id
-  '696145831054-rr1rgaq6gbe5fs3t0e431uqvcc3hj601.apps.googleusercontent.com',                            // client_secret
-  'https://remote-mcp-authkit.emaad-brainwonders.workers.dev/sse'                              // redirect_uri (can be unused for refresh_token)
-);
+// Hardcoded access token (for demo/testing only; refresh with your backend if expired)
+const GOOGLE_CALENDAR_ACCESS_TOKEN = "ya29.a0AS3H6NzNSiPe7tpYLv2nchRUENSvZOlp1x7Td1MwTfu9FXPVQ1UHyzEAHq1BEd4_8v_Sbxr6sbOVJJfiAgPvafHo5GRz8U5tbp-hIjXL_GkKIjdePWZX_swTRH6fh15i7IhnP7nZpk1lad-OD68RrsKSQzHkbRw6rZ7IiGfHaCgYKAd0SARQSFQHGX2Micdx1V7c7_XqqnQCMb4ve8Q0175"; // Get this from your backend using refresh token
 
-// Hardcode refresh token for the Google account (for quick testing)
-oAuth2Client.setCredentials({
-  refresh_token: 'Y1//04dgfTTR74D6JCgYIARAAGAQSNwF-L9Ir8n5WqFfoOhxqrCLWewAsUI6pPaL75dYS1DLQuA6_3xCwDvA1aOgPWxUBJKr5LenrvPA',
-});
-
-async function scheduleAppointment({
+export async function scheduleAppointment({
   summary,
   description,
   startDateTime,
@@ -21,33 +12,47 @@ async function scheduleAppointment({
 }: {
   summary: string;
   description?: string;
-  startDateTime: string;
-  endDateTime: string;
+  startDateTime: string; // ISO string
+  endDateTime: string;   // ISO string
   attendees?: { email: string }[];
 }) {
-  const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
-
   const event = {
     summary,
     description,
-    start: { dateTime: startDateTime },
-    end: { dateTime: endDateTime },
+    start: { dateTime: startDateTime, timeZone: "UTC" },
+    end: { dateTime: endDateTime, timeZone: "UTC" },
     attendees,
   };
 
-  try {
-    const response = await calendar.events.insert({
-      calendarId: 'primary',
-      requestBody: event,
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error scheduling appointment:', error);
-    throw error;
+  const response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${GOOGLE_CALENDAR_ACCESS_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(event)
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Google Calendar API error: ${response.status} ${errorBody}`);
   }
+
+  return response.json();
 }
 
-// Register with your server/tool mechanism
-this.server.tool('scheduleAppointment', async (args: any) => {
-  return await scheduleAppointment(args);
-});
+// Example Cloudflare Worker route for appointment scheduling
+export default {
+  async fetch(request: Request): Promise<Response> {
+    if (request.method === "POST" && new URL(request.url).pathname === "/api/schedule") {
+      const data = await request.json();
+      try {
+        const event = await scheduleAppointment(data);
+        return new Response(JSON.stringify(event), { status: 200, headers: { "Content-Type": "application/json" } });
+      } catch (err: any) {
+        return new Response(err.message, { status: 500 });
+      }
+    }
+    return new Response("Not found", { status: 404 });
+  }
+};
