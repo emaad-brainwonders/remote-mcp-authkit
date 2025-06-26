@@ -27,6 +27,18 @@ function getCurrentDate(): string {
 	return formatDateToString(nowUTC);
 }
 
+// Helper: Format date for display
+function formatDateForDisplay(dateString: string): string {
+	const date = new Date(dateString + 'T00:00:00');
+	const options: Intl.DateTimeFormatOptions = { 
+		weekday: 'long', 
+		year: 'numeric', 
+		month: 'long', 
+		day: 'numeric' 
+	};
+	return date.toLocaleDateString('en-IN', options);
+}
+
 // Helper: Parse relative date expressions with better error handling
 function parseRelativeDate(dateInput: string): string {
 	if (!dateInput || typeof dateInput !== 'string') {
@@ -236,6 +248,7 @@ export function registerAppointmentTools(server: McpServer) {
 			try {
 				// Parse the date input to handle relative expressions
 				const parsedDate = parseRelativeDate(date);
+				const displayDate = formatDateForDisplay(parsedDate);
 				
 				// Set time bounds for the day in Asia/Kolkata timezone
 				const startDateTime = `${parsedDate}T00:00:00+05:30`;
@@ -255,14 +268,14 @@ export function registerAppointmentTools(server: McpServer) {
 						content: [
 							{
 								type: "text",
-								text: `No appointments scheduled for ${parsedDate} (interpreted from: "${date}")`,
+								text: `🗓️ You have a completely free day on ${displayDate}! No appointments scheduled.`,
 							},
 						],
 					};
 				}
 				
 				const scheduleText = events
-					.map((event: any) => {
+					.map((event: any, index: number) => {
 						const start = event.start?.dateTime || event.start?.date;
 						const end = event.end?.dateTime || event.end?.date;
 						
@@ -286,15 +299,19 @@ export function registerAppointmentTools(server: McpServer) {
 							}
 						}
 						
-						return `• ${event.summary || 'Untitled'} (${timeString})`;
+						const eventTitle = event.summary || 'Untitled Event';
+						return `${index + 1}. **${eventTitle}** - ${timeString}`;
 					})
 					.join('\n');
+				
+				const eventCount = events.length;
+				const pluralText = eventCount === 1 ? 'appointment' : 'appointments';
 				
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Schedule for ${parsedDate} (interpreted from: "${date}"):\n${scheduleText}`,
+							text: `📅 **Your schedule for ${displayDate}**\n\nYou have ${eventCount} ${pluralText} planned:\n\n${scheduleText}`,
 						},
 					],
 				};
@@ -303,7 +320,7 @@ export function registerAppointmentTools(server: McpServer) {
 					content: [
 						{
 							type: "text",
-							text: `Error getting schedule: ${error instanceof Error ? error.message : 'Unknown error'}`,
+							text: `❌ I couldn't retrieve your schedule. ${error instanceof Error ? error.message : 'Please try again later.'}`,
 						},
 					],
 				};
@@ -323,6 +340,7 @@ export function registerAppointmentTools(server: McpServer) {
 			try {
 				// Parse the date input to handle relative expressions
 				const parsedDate = parseRelativeDate(date);
+				const displayDate = formatDateForDisplay(parsedDate);
 				
 				// Get existing events for the day
 				const startDateTime = `${parsedDate}T00:00:00+05:30`;
@@ -340,13 +358,16 @@ export function registerAppointmentTools(server: McpServer) {
 				// Generate recommendations based on duration
 				const recommendations: string[] = [];
 				const workingHours = [
-					{ start: 9, end: 12 }, // Morning
-					{ start: 14, end: 17 }  // Afternoon
+					{ start: 9, end: 12, period: 'Morning' }, 
+					{ start: 14, end: 17, period: 'Afternoon' }  
 				];
 				
 				// Convert duration to minutes for more precise slot generation
 				const durationMinutes = duration * 60;
 				const slotIntervalMinutes = 30; // Generate slots every 30 minutes
+				
+				let morningSlots: string[] = [];
+				let afternoonSlots: string[] = [];
 				
 				for (const period of workingHours) {
 					const startMinutes = period.start * 60;
@@ -375,42 +396,58 @@ export function registerAppointmentTools(server: McpServer) {
 								timeZone: 'Asia/Kolkata'
 							});
 							
-							const durationText = duration === 1 ? '1 hour' : 
-											   duration === 0.5 ? '30 minutes' : 
-											   duration < 1 ? `${duration * 60} minutes` : 
-											   `${duration} hours`;
+							const timeSlot = `${startFormatted} - ${endFormatted}`;
 							
-							recommendations.push(`${startFormatted} - ${endFormatted} (${durationText})`);
+							if (period.period === 'Morning') {
+								morningSlots.push(timeSlot);
+							} else {
+								afternoonSlots.push(timeSlot);
+							}
 						}
 					}
 				}
 				
-				if (recommendations.length === 0) {
-					const durationText = duration === 1 ? '1-hour' : 
-									   duration === 0.5 ? '30-minute' : 
-									   duration < 1 ? `${duration * 60}-minute` : 
-									   `${duration}-hour`;
-					
+				const durationText = duration === 1 ? '1 hour' : 
+								   duration === 0.5 ? '30 minutes' : 
+								   duration < 1 ? `${duration * 60} minutes` : 
+								   `${duration} hours`;
+				
+				if (morningSlots.length === 0 && afternoonSlots.length === 0) {
 					return {
 						content: [
 							{
 								type: "text",
-								text: `No available ${durationText} slots found for ${parsedDate} (interpreted from: "${date}") during working hours (9 AM - 12 PM, 2 PM - 5 PM IST)`,
+								text: `😔 **No availability found**\n\nI couldn't find any ${durationText} slots available on ${displayDate} during standard working hours (9 AM - 12 PM, 2 PM - 5 PM).\n\nYour day might be fully booked, or you might want to try a different date.`,
 							},
 						],
 					};
 				}
 				
-				const durationText = duration === 1 ? '1-hour' : 
-								   duration === 0.5 ? '30-minute' : 
-								   duration < 1 ? `${duration * 60}-minute` : 
-								   `${duration}-hour`;
+				let responseText = `⏰ **Available ${durationText} slots for ${displayDate}**\n\n`;
+				
+				if (morningSlots.length > 0) {
+					responseText += `🌅 **Morning Options:**\n`;
+					morningSlots.forEach((slot, index) => {
+						responseText += `${index + 1}. ${slot}\n`;
+					});
+					responseText += '\n';
+				}
+				
+				if (afternoonSlots.length > 0) {
+					responseText += `🌤️ **Afternoon Options:**\n`;
+					afternoonSlots.forEach((slot, index) => {
+						responseText += `${index + 1}. ${slot}\n`;
+					});
+				}
+				
+				const totalSlots = morningSlots.length + afternoonSlots.length;
+				responseText += `\n✨ Found ${totalSlots} available time ${totalSlots === 1 ? 'slot' : 'slots'} for you to choose from!`;
 				
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Available ${durationText} appointment slots for ${parsedDate} (interpreted from: "${date}"):\n${recommendations.join('\n')}`,
+							text: responseText.trim(),
 						},
 					],
 				};
@@ -419,7 +456,7 @@ export function registerAppointmentTools(server: McpServer) {
 					content: [
 						{
 							type: "text",
-							text: `Error getting recommendations: ${error instanceof Error ? error.message : 'Unknown error'}`,
+							text: `❌ I couldn't check your availability. ${error instanceof Error ? error.message : 'Please try again later.'}`,
 						},
 					],
 				};
@@ -454,6 +491,7 @@ export function registerAppointmentTools(server: McpServer) {
 				
 				// Parse the date input to handle relative expressions
 				const parsedDate = parseRelativeDate(date);
+				const displayDate = formatDateForDisplay(parsedDate);
 				
 				// Validate time format (additional check)
 				if (!validateTimeFormat(startTime) || !validateTimeFormat(endTime)) {
@@ -471,6 +509,18 @@ export function registerAppointmentTools(server: McpServer) {
 				if (endDate <= startDate) {
 					throw new Error("End time must be after start time");
 				}
+				
+				// Format times for display
+				const displayStartTime = startDate.toLocaleTimeString('en-IN', { 
+					hour: '2-digit', 
+					minute: '2-digit',
+					timeZone: 'Asia/Kolkata'
+				});
+				const displayEndTime = endDate.toLocaleTimeString('en-IN', { 
+					hour: '2-digit', 
+					minute: '2-digit',
+					timeZone: 'Asia/Kolkata'
+				});
 				
 				// Check availability if requested
 				if (checkAvailability) {
@@ -491,7 +541,7 @@ export function registerAppointmentTools(server: McpServer) {
 							content: [
 								{
 									type: "text",
-									text: `Time slot ${startTime} to ${endTime} on ${parsedDate} (interpreted from: "${date}") is not available. Please use the 'recommendAppointmentTimes' tool to find available slots.`,
+									text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots that work for you.`,
 								},
 							],
 						};
@@ -519,11 +569,30 @@ export function registerAppointmentTools(server: McpServer) {
 					}
 				);
 				
+				let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
+				responseText += `📋 **Event:** ${summary}\n`;
+				responseText += `📅 **Date:** ${displayDate}\n`;
+				responseText += `⏰ **Time:** ${displayStartTime} - ${displayEndTime}\n`;
+				
+				if (description) {
+					responseText += `📝 **Description:** ${description}\n`;
+				}
+				
+				if (attendees.length > 0) {
+					responseText += `👥 **Attendees:** ${attendees.join(', ')}\n`;
+				}
+				
+				if (result.htmlLink) {
+					responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
+				}
+				
+				responseText += `\n\n🎉 All set! Your appointment has been added to your calendar.`;
+				
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Appointment "${summary}" successfully created for ${parsedDate} (interpreted from: "${date}") from ${startTime} to ${endTime}. Event link: ${result.htmlLink || 'N/A'}`,
+							text: responseText,
 						},
 					],
 				};
@@ -532,7 +601,7 @@ export function registerAppointmentTools(server: McpServer) {
 					content: [
 						{
 							type: "text",
-							text: `Error scheduling appointment: ${error instanceof Error ? error.message : 'Unknown error'}`,
+							text: `❌ **Failed to schedule appointment**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}\n\n💡 Double-check your date and time format, then try again.`,
 						},
 					],
 				};
