@@ -247,7 +247,12 @@ export function registerAppointmentTools(server: McpServer) {
 			startDateTime: z.string().describe("Start time in ISO format (e.g., 2024-01-15T10:00:00)"),
 			endDateTime: z.string().describe("End time in ISO format (e.g., 2024-01-15T11:00:00)"),
 			attendees: z.array(z.object({ email: z.string() })).optional(),
-			checkAvailability: z.boolean().default(true).describe("Check if the time slot is available before scheduling"),
+			checkAvailability: z.union([z.boolean(), z.string()]).default(true).transform((val) => {
+				if (typeof val === 'string') {
+					return val.toLowerCase() === 'true';
+				}
+				return val;
+			}).describe("Check if the time slot is available before scheduling (true/false)"),
 		},
 		async ({
 			summary,
