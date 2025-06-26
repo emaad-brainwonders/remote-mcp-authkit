@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NwSmk3rZggJyg_MQCQIV3eKw2wZ-VqcBfKY5Rz74zsORHH01CgnTvpTgp2AooRHJODcAAWG8q79cDUjd76ux_LdM_idOMzjUP6V72DpSUTBndcLKh9sMWnI76dECUgo7ZhUZncy5kvmuvEB_NiWAyxutAhaNb9mt-mAaCgYKATMSARQSFQHGX2MiV-nlz6o67aLHeRldXyp_WQ0175";
+const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6Nyj0AeF2FRmpXrJ2aPt-4Z_tcgz2RSZE-oi_CkW7lQp_x2BenwEyDXMvsvFhHLtio_Y6weT3Y_r1lKNFls694HDbBhbBkY2rlsD0-t-1Uzhw3mcvmzxpR7WVlQgXQVuW8Nv_YKlegNLJjA7nUk17LGH2aDeDAIy2wddaCgYKAWISARQSFQHGX2MiIir6hpaeQlc6ckkuVWWMYg0175";
 
 // Helper: Format date to YYYY-MM-DD   
 function formatDateToString(date: Date): string {
