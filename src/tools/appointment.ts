@@ -117,6 +117,62 @@ function isTimeSlotAvailable(events: any[], startTime: string, endTime: string):
 	});
 }
 
+// Helper: Generate calendar invite links
+function generateInviteLinks(summary: string, description: string, startDateTime: string, endDateTime: string, attendees: string[] = []): {
+	googleCalendar: string;
+	outlook: string;
+	icsDownload: string;
+} {
+	// Convert to proper date format for invite links
+	const startDate = new Date(startDateTime);
+	const endDate = new Date(endDateTime);
+	
+	// Format dates for Google Calendar (YYYYMMDDTHHMMSSZ)
+	const formatDateForGoogle = (date: Date) => {
+		return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+	};
+	
+	// Format dates for Outlook (YYYY-MM-DDTHH:MM:SS.sssZ)
+	const formatDateForOutlook = (date: Date) => {
+		return date.toISOString();
+	};
+	
+	const googleStartTime = formatDateForGoogle(startDate);
+	const googleEndTime = formatDateForGoogle(endDate);
+	const outlookStartTime = formatDateForOutlook(startDate);
+	const outlookEndTime = formatDateForOutlook(endDate);
+	
+	// Google Calendar link
+	const googleCalendarLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(summary)}&dates=${googleStartTime}/${googleEndTime}&details=${encodeURIComponent(description)}&location=&sf=true&output=xml`;
+	
+	// Outlook link
+	const outlookLink = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${encodeURIComponent(summary)}&startdt=${outlookStartTime}&enddt=${outlookEndTime}&body=${encodeURIComponent(description)}`;
+	
+	// ICS file content for download
+	const icsContent = [
+		'BEGIN:VCALENDAR',
+		'VERSION:2.0',
+		'PRODID:-//Your App//Calendar//EN',
+		'BEGIN:VEVENT',
+		`DTSTART:${googleStartTime}`,
+		`DTEND:${googleEndTime}`,
+		`SUMMARY:${summary}`,
+		`DESCRIPTION:${description.replace(/\n/g, '\\n')}`,
+		`UID:${Date.now()}@yourapp.com`,
+		'DTSTAMP:' + formatDateForGoogle(new Date()),
+		'END:VEVENT',
+		'END:VCALENDAR'
+	].join('\r\n');
+	
+	const icsDataUri = `data:text/calendar;charset=utf8,${encodeURIComponent(icsContent)}`;
+	
+	return {
+		googleCalendar: googleCalendarLink,
+		outlook: outlookLink,
+		icsDownload: icsDataUri
+	};
+}
+
 // Helper: Generate time slot recommendations
 function generateTimeSlotRecommendations(events: any[], date: string): string[] {
 	const recommendations: string[] = [];
