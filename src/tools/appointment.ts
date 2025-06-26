@@ -626,7 +626,7 @@ server.tool(
       summary: z.string().min(1).describe("Title/summary of the appointment to cancel"),
       date: z.string().min(1).describe("Date of the appointment in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', etc."),
       exactMatch: z.coerce.boolean().default(false).describe("Whether to require exact title match (default: false for partial matching)"),
-confirmationRequired: z.coerce.boolean().default(true).describe("Whether to require confirmation before canceling (default: true)"),
+confirmationRequired: z.coerce.boolean().default(true).describe("Whether to require confirmation before canceling (default: false)"),
 
    },
    async ({ summary, date, exactMatch = false, confirmationRequired = true }) => {
