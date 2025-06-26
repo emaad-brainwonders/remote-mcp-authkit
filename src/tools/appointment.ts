@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6Nyj0AeF2FRmpXrJ2aPt-4Z_tcgz2RSZE-oi_CkW7lQp_x2BenwEyDXMvsvFhHLtio_Y6weT3Y_r1lKNFls694HDbBhbBkY2rlsD0-t-1Uzhw3mcvmzxpR7WVlQgXQVuW8Nv_YKlegNLJjA7nUk17LGH2aDeDAIy2wddaCgYKAWISARQSFQHGX2MiIir6hpaeQlc6ckkuVWWMYg0175";
+const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NwSmk3rZggJyg_MQCQIV3eKw2wZ-VqcBfKY5Rz74zsORHH01CgnTvpTgp2AooRHJODcAAWG8q79cDUjd76ux_LdM_idOMzjUP6V72DpSUTBndcLKh9sMWnI76dECUgo7ZhUZncy5kvmuvEB_NiWAyxutAhaNb9mt-mAaCgYKATMSARQSFQHGX2MiV-nlz6o67aLHeRldXyp_WQ0175";
 
 // Helper: Format date to YYYY-MM-DD   
 function formatDateToString(date: Date): string {
@@ -150,31 +150,6 @@ function generateTimeSlotRecommendations(events: any[], date: string): string[] 
 	return recommendations;
 }
 
-// Helper: Parse attendees from string or array
-function parseAttendees(attendeesInput: string | Array<{email: string}>): Array<{email: string}> {
-	if (Array.isArray(attendeesInput)) {
-		return attendeesInput;
-	}
-	
-	if (typeof attendeesInput === 'string') {
-		try {
-			const parsed = JSON.parse(attendeesInput);
-			if (Array.isArray(parsed)) {
-				return parsed;
-			}
-		} catch (error) {
-			// If JSON parsing fails, try to extract email addresses from the string
-			const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-			const emails = attendeesInput.match(emailRegex);
-			if (emails) {
-				return emails.map(email => ({ email }));
-			}
-		}
-	}
-	
-	return [];
-}
-
 export function registerAppointmentTools(server: McpServer) {
 	// Get schedule for a specific date (now supports relative dates)
 	server.tool(
@@ -278,9 +253,9 @@ export function registerAppointmentTools(server: McpServer) {
 		"Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
 		{
 			date: z.string().describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', 'next week', etc."),
-			duration: z.number().default(0.5).describe("Duration in hours (default: 0.5 hours = 30 minutes)"),
+			duration: z.number().default(1).describe("Duration in hours (default: 1 hour)"),
 		},
-		async ({ date, duration = 0.5 }) => {
+		async ({ date, duration = 1 }) => {
 			const token = HARDCODED_GOOGLE_ACCESS_TOKEN;
 			
 			if (!token) throw new Error("Google OAuth access token is required.");
@@ -335,24 +310,10 @@ export function registerAppointmentTools(server: McpServer) {
 				{ start: 14, end: 17 }  // Afternoon
 			];
 			
-			// Convert duration to minutes for more precise slot generation
-			const durationMinutes = duration * 60;
-			const slotIntervalMinutes = 30; // Generate slots every 30 minutes
-			
 			for (const period of workingHours) {
-				const startMinutes = period.start * 60; // Convert to minutes from midnight
-				const endMinutes = period.end * 60;
-				
-				// Generate slots at 30-minute intervals
-				for (let currentMinutes = startMinutes; currentMinutes <= endMinutes - durationMinutes; currentMinutes += slotIntervalMinutes) {
-					const startHour = Math.floor(currentMinutes / 60);
-					const startMinute = currentMinutes % 60;
-					const endTotalMinutes = currentMinutes + durationMinutes;
-					const endHour = Math.floor(endTotalMinutes / 60);
-					const endMinuteValue = endTotalMinutes % 60;
-					
-					const startTime = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
-					const endTime = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinuteValue.toString().padStart(2, '0')}:00`;
+				for (let hour = period.start; hour <= period.end - duration; hour++) {
+					const startTime = `${parsedDate}T${hour.toString().padStart(2, '0')}:00:00`;
+					const endTime = `${parsedDate}T${(hour + duration).toString().padStart(2, '0')}:00:00`;
 					
 					if (isTimeSlotAvailable(events, startTime, endTime)) {
 						const startFormatted = new Date(startTime).toLocaleTimeString('en-IN', { 
@@ -366,49 +327,34 @@ export function registerAppointmentTools(server: McpServer) {
 							timeZone: 'Asia/Kolkata'
 						});
 						
-						const durationText = duration === 1 ? '1 hour' : 
-										   duration === 0.5 ? '30 minutes' : 
-										   duration < 1 ? `${duration * 60} minutes` : 
-										   `${duration} hours`;
-						
-						recommendations.push(`${startFormatted} - ${endFormatted} (${durationText})`);
+						recommendations.push(`${startFormatted} - ${endFormatted} (${startTime} to ${endTime})`);
 					}
 				}
 			}
 			
 			if (recommendations.length === 0) {
-				const durationText = duration === 1 ? '1-hour' : 
-								   duration === 0.5 ? '30-minute' : 
-								   duration < 1 ? `${duration * 60}-minute` : 
-								   `${duration}-hour`;
-				
 				return {
 					content: [
 						{
 							type: "text",
-							text: `No available ${durationText} slots found for ${parsedDate} (interpreted from: "${date}") during working hours (9 AM - 12 PM, 2 PM - 5 PM IST)`,
+							text: `No available ${duration}-hour slots found for ${parsedDate} (interpreted from: "${date}") during working hours (9 AM - 12 PM, 2 PM - 5 PM IST)`,
 						},
 					],
 				};
 			}
 			
-			const durationText = duration === 1 ? '1-hour' : 
-							   duration === 0.5 ? '30-minute' : 
-							   duration < 1 ? `${duration * 60}-minute` : 
-							   `${duration}-hour`;
-			
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Available ${durationText} appointment slots for ${parsedDate} (interpreted from: "${date}"):\n${recommendations.join('\n')}`,
+						text: `Available ${duration}-hour appointment slots for ${parsedDate} (interpreted from: "${date}"):\n${recommendations.join('\n')}`,
 					},
 				],
 			};
 		}
 	);
 	
-	// Schedule appointment tool (enhanced with relative date support and flexible attendees parsing)
+	// Schedule appointment tool (enhanced with relative date support)
 	server.tool(
 		"scheduleAppointment",
 		"Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone, and includes today's date in the description). Supports relative dates like 'today', 'tomorrow', '10 days from now', etc.",
@@ -418,10 +364,7 @@ export function registerAppointmentTools(server: McpServer) {
 			date: z.string().describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
 			startTime: z.string().describe("Start time in HH:MM format (24-hour), e.g., '10:00'"),
 			endTime: z.string().describe("End time in HH:MM format (24-hour), e.g., '11:00'"),
-			attendees: z.union([
-				z.array(z.object({ email: z.string() })),
-				z.string()
-			]).optional().describe("Array of attendee objects with email, or JSON string, or comma-separated emails"),
+			attendees: z.array(z.object({ email: z.string() })).optional(),
 			checkAvailability: z.union([z.boolean(), z.string()]).default(true).transform((val) => {
 				if (typeof val === 'string') {
 					return val.toLowerCase() === 'true';
@@ -435,7 +378,7 @@ export function registerAppointmentTools(server: McpServer) {
 			date,
 			startTime,
 			endTime,
-			attendees,
+			attendees = [],
 			checkAvailability = true,
 		}) => {
 			const token = HARDCODED_GOOGLE_ACCESS_TOKEN;
@@ -456,23 +399,6 @@ export function registerAppointmentTools(server: McpServer) {
 						},
 					],
 				};
-			}
-			
-			// Parse attendees if provided
-			let parsedAttendees: Array<{email: string}> = [];
-			if (attendees) {
-				try {
-					parsedAttendees = parseAttendees(attendees);
-				} catch (error) {
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Error parsing attendees: ${error instanceof Error ? error.message : 'Invalid attendees format'}`,
-							},
-						],
-					};
-				}
 			}
 			
 			// Construct full datetime strings
@@ -524,7 +450,7 @@ export function registerAppointmentTools(server: McpServer) {
 				description: fullDescription,
 				start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
 				end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-				attendees: parsedAttendees,
+				attendees,
 			};
 			
 			const response = await fetch(
@@ -547,14 +473,11 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 			
 			const result = (await response.json()) as { htmlLink?: string };
-			const attendeeInfo = parsedAttendees.length > 0 ? 
-				` with attendees: ${parsedAttendees.map(a => a.email).join(', ')}` : '';
-			
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Appointment successfully created for ${parsedDate} (interpreted from: "${date}") from ${startTime} to ${endTime}${attendeeInfo}: ${result.htmlLink}`,
+						text: `Appointment successfully created for ${parsedDate} (interpreted from: "${date}") from ${startTime} to ${endTime}: ${result.htmlLink}`,
 					},
 				],
 			};
