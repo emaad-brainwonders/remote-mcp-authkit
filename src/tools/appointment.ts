@@ -615,5 +615,255 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 		}
 	);
+
+	// Cancel appointment tool
+server.tool(
+   "cancelAppointment",
+   "Cancel an existing appointment from Google Calendar by searching for it by title and date",
+   {
+   	summary: z.string().min(1).describe("Title/summary of the appointment to cancel"),
+   	date: z.string().min(1).describe("Date of the appointment in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', etc."),
+   },
+   async ({ summary, date }) => {
+   	try {
+   		// Parse the date input to handle relative expressions
+   		const parsedDate = parseRelativeDate(date);
+   		const displayDate = formatDateForDisplay(parsedDate);
+   		
+   		// Set time bounds for the day
+   		const startDateTime = `${parsedDate}T00:00:00+05:30`;
+   		const endDateTime = `${parsedDate}T23:59:59+05:30`;
+   		
+   		// Search for events on the specified date
+   		const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+   			`timeMin=${encodeURIComponent(startDateTime)}&` +
+   			`timeMax=${encodeURIComponent(endDateTime)}&` +
+   			`singleEvents=true&` +
+   			`orderBy=startTime`;
+   		
+   		const searchResult = await makeCalendarApiRequest(searchUrl);
+   		const events = searchResult.items || [];
+   		
+   		// Find the event with matching title (case-insensitive)
+   		const eventToCancel = events.find((event: any) => 
+   			event.summary && event.summary.toLowerCase().includes(summary.toLowerCase())
+   		);
+   		
+   		if (!eventToCancel) {
+   			return {
+   				content: [
+   					{
+   						type: "text",
+   						text: `❌ **Appointment not found**\n\nI couldn't find an appointment with the title "${summary}" on ${displayDate}.\n\n💡 Please check the appointment title and date, then try again.`,
+   					},
+   				],
+   			};
+   		}
+   		
+   		// Cancel the event
+   		const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToCancel.id}`;
+   		await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
+   		
+   		// Format the time for display
+   		const start = eventToCancel.start?.dateTime || eventToCancel.start?.date;
+   		let timeString = 'All day';
+   		if (start && start.includes('T')) {
+   			const startTime = new Date(start).toLocaleTimeString('en-IN', { 
+   				hour: '2-digit', 
+   				minute: '2-digit',
+   				timeZone: 'Asia/Kolkata'
+   			});
+   			
+   			const end = eventToCancel.end?.dateTime || eventToCancel.end?.date;
+   			if (end && end.includes('T')) {
+   				const endTime = new Date(end).toLocaleTimeString('en-IN', { 
+   					hour: '2-digit', 
+   					minute: '2-digit',
+   					timeZone: 'Asia/Kolkata'
+   				});
+   				timeString = `${startTime} - ${endTime}`;
+   			}
+   		}
+   		
+   		return {
+   			content: [
+   				{
+   					type: "text",
+   					text: `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${displayDate}\n⏰ **Time:** ${timeString}\n\n🗑️ The appointment has been removed from your calendar.`,
+   				},
+   			],
+   		};
+   	} catch (error) {
+   		return {
+   			content: [
+   				{
+   					type: "text",
+   					text: `❌ **Failed to cancel appointment**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}`,
+   				},
+   			],
+   		};
+   	}
+   }
+);
+
+// Reschedule appointment tool
+server.tool(
+   "rescheduleAppointment",
+   "Reschedule an existing appointment to a new date and time",
+   {
+   	summary: z.string().min(1).describe("Title/summary of the appointment to reschedule"),
+   	currentDate: z.string().min(1).describe("Current date of the appointment in YYYY-MM-DD format or relative expression"),
+   	newDate: z.string().min(1).describe("New date for the appointment in YYYY-MM-DD format or relative expression"),
+   	newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
+   	newEndTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New end time in HH:MM format (24-hour)"),
+   	checkAvailability: z.boolean().default(true).describe("Check if the new time slot is available"),
+   },
+   async ({ summary, currentDate, newDate, newStartTime, newEndTime, checkAvailability = true }) => {
+   	try {
+   		// Parse the date inputs
+   		const parsedCurrentDate = parseRelativeDate(currentDate);
+   		const parsedNewDate = parseRelativeDate(newDate);
+   		const displayCurrentDate = formatDateForDisplay(parsedCurrentDate);
+   		const displayNewDate = formatDateForDisplay(parsedNewDate);
+   		
+   		// Validate new time format
+   		if (!validateTimeFormat(newStartTime) || !validateTimeFormat(newEndTime)) {
+   			throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
+   		}
+   		
+   		// Find the existing appointment
+   		const currentStartDateTime = `${parsedCurrentDate}T00:00:00+05:30`;
+   		const currentEndDateTime = `${parsedCurrentDate}T23:59:59+05:30`;
+   		
+   		const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+   			`timeMin=${encodeURIComponent(currentStartDateTime)}&` +
+   			`timeMax=${encodeURIComponent(currentEndDateTime)}&` +
+   			`singleEvents=true&` +
+   			`orderBy=startTime`;
+   		
+   		const searchResult = await makeCalendarApiRequest(searchUrl);
+   		const events = searchResult.items || [];
+   		
+   		const eventToReschedule = events.find((event: any) => 
+   			event.summary && event.summary.toLowerCase().includes(summary.toLowerCase())
+   		);
+   		
+   		if (!eventToReschedule) {
+   			return {
+   				content: [
+   					{
+   						type: "text",
+   						text: `❌ **Appointment not found**\n\nI couldn't find an appointment with the title "${summary}" on ${displayCurrentDate}.\n\n💡 Please check the appointment title and current date, then try again.`,
+   					},
+   				],
+   			};
+   		}
+   		
+   		// Validate new times
+   		const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
+   		const newEndDateTime = `${parsedNewDate}T${newEndTime}:00`;
+   		
+   		const newStartDate = new Date(newStartDateTime);
+   		const newEndDate = new Date(newEndDateTime);
+   		
+   		if (newEndDate <= newStartDate) {
+   			throw new Error("New end time must be after new start time");
+   		}
+   		
+   		// Check availability for new time slot if requested
+   		if (checkAvailability) {
+   			const newDayStartTime = `${parsedNewDate}T00:00:00+05:30`;
+   			const newDayEndTime = `${parsedNewDate}T23:59:59+05:30`;
+   			
+   			const availabilityUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+   				`timeMin=${encodeURIComponent(newDayStartTime)}&` +
+   				`timeMax=${encodeURIComponent(newDayEndTime)}&` +
+   				`singleEvents=true&` +
+   				`orderBy=startTime`;
+   			
+   			const availabilityResult = await makeCalendarApiRequest(availabilityUrl);
+   			const existingEvents = (availabilityResult.items || []).filter((event: any) => 
+   				event.id !== eventToReschedule.id // Exclude the current event being rescheduled
+   			);
+   			
+   			if (!isTimeSlotAvailable(existingEvents, newStartDateTime, newEndDateTime)) {
+   				const displayNewStartTime = newStartDate.toLocaleTimeString('en-IN', { 
+   					hour: '2-digit', 
+   					minute: '2-digit',
+   					timeZone: 'Asia/Kolkata'
+   				});
+   				const displayNewEndTime = newEndDate.toLocaleTimeString('en-IN', { 
+   					hour: '2-digit', 
+   					minute: '2-digit',
+   					timeZone: 'Asia/Kolkata'
+   				});
+   				
+   				return {
+   					content: [
+   						{
+   							type: "text",
+   							text: `⚠️ **New time slot unavailable**\n\nThe new time slot ${displayNewStartTime} - ${displayNewEndTime} on ${displayNewDate} conflicts with another appointment.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots.`,
+   						},
+   					],
+   				};
+   			}
+   		}
+   		
+   		// Update the event
+   		const updatedEvent = {
+   			...eventToReschedule,
+   			start: { dateTime: newStartDateTime, timeZone: "Asia/Kolkata" },
+   			end: { dateTime: newEndDateTime, timeZone: "Asia/Kolkata" },
+   		};
+   		
+   		const updateUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToReschedule.id}`;
+   		const result = await makeCalendarApiRequest(updateUrl, {
+   			method: "PUT",
+   			body: JSON.stringify(updatedEvent),
+   		});
+   		
+   		// Format times for display
+   		const displayNewStartTime = newStartDate.toLocaleTimeString('en-IN', { 
+   			hour: '2-digit', 
+   			minute: '2-digit',
+   			timeZone: 'Asia/Kolkata'
+   		});
+   		const displayNewEndTime = newEndDate.toLocaleTimeString('en-IN', { 
+   			hour: '2-digit', 
+   			minute: '2-digit',
+   			timeZone: 'Asia/Kolkata'
+   		});
+   		
+   		let responseText = `✅ **Appointment rescheduled successfully!**\n\n`;
+   		responseText += `📋 **Event:** ${eventToReschedule.summary}\n`;
+   		responseText += `📅 **New Date:** ${displayNewDate}\n`;
+   		responseText += `⏰ **New Time:** ${displayNewStartTime} - ${displayNewEndTime}\n`;
+   		
+   		if (result.htmlLink) {
+   			responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
+   		}
+   		
+   		responseText += `\n\n🎉 Your appointment has been successfully moved to the new time slot!`;
+   		
+   		return {
+   			content: [
+   				{
+   					type: "text",
+   					text: responseText,
+   				},
+   			],
+   		};
+   	} catch (error) {
+   		return {
+   			content: [
+   				{
+   					type: "text",
+   					text: `❌ **Failed to reschedule appointment**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}`,
+   				},
+   			],
+   		};
+   	}
+   }
+);
 	
 }
