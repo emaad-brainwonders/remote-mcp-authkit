@@ -615,5 +615,134 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 		}
 	);
+	// Add after the last server.tool(...); call, before the closing brace of registerAppointmentTools
+
+// Cancel appointment by attendee email, date, and (optionally) summary
+server.tool(
+  "cancelAppointmentByEmail",
+  "Cancel an appointment based on attendee email, with optional date and summary filters.",
+  {
+    email: z.string().email().describe("Attendee's email address"),
+    date: z.string().optional().describe("Date in YYYY-MM-DD format or relative expression (optional)"),
+    summary: z.string().optional().describe("Appointment summary/title (optional)"),
+  },
+  async ({ email, date, summary }) => {
+    try {
+      // Build search query for events
+      let parsedDate: string | undefined = date ? parseRelativeDate(date) : undefined;
+      let timeMin = parsedDate ? `${parsedDate}T00:00:00+05:30` : undefined;
+      let timeMax = parsedDate ? `${parsedDate}T23:59:59+05:30` : undefined;
+
+      let url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime`;
+      if (timeMin) url += `&timeMin=${encodeURIComponent(timeMin)}`;
+      if (timeMax) url += `&timeMax=${encodeURIComponent(timeMax)}`;
+
+      const result = await makeCalendarApiRequest(url);
+      const events = result.items || [];
+
+      // Find event(s) by attendee email (and optionally summary)
+      const matchingEvents = events.filter((event: any) => {
+        const attendees = event.attendees ? event.attendees.map((a: any) => a.email) : [];
+        const matchesEmail = attendees.includes(email);
+        const matchesSummary = summary ? event.summary === summary : true;
+        return matchesEmail && matchesSummary;
+      });
+
+      if (matchingEvents.length === 0) {
+        return {
+          content: [{ type: "text", text: `❌ No matching appointments found for ${email}${parsedDate ? " on " + formatDateForDisplay(parsedDate) : ""}${summary ? " with summary '" + summary + "'" : ""}.` }],
+        };
+      }
+
+      // Cancel (delete) the first matching event (or all, if you prefer)
+      const deleted = [];
+      for (const event of matchingEvents) {
+        await makeCalendarApiRequest(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${event.id}`,
+          { method: "DELETE" }
+        );
+        deleted.push(event.summary || "Untitled Event");
+      }
+
+      return {
+        content: [{ type: "text", text: `🗑️ Successfully cancelled ${deleted.length} appointment(s): ${deleted.join(", ")}.` }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `❌ Failed to cancel appointment: ${error instanceof Error ? error.message : String(error)}` }],
+      };
+    }
+  }
+);
+
+// Reschedule appointment by attendee email, date, summary, and new time
+server.tool(
+  "rescheduleAppointmentByEmail",
+  "Reschedule an appointment for an attendee email (and optional date/summary). Provide new date, start and end time.",
+  {
+    email: z.string().email().describe("Attendee's email address"),
+    date: z.string().optional().describe("Original date of appointment (optional)"),
+    summary: z.string().optional().describe("Appointment summary/title (optional)"),
+    newDate: z.string().min(1).describe("New date in YYYY-MM-DD format or relative expression"),
+    newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
+    newEndTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New end time in HH:MM format (24-hour)"),
+  },
+  async ({ email, date, summary, newDate, newStartTime, newEndTime }) => {
+    try {
+      // Find event as above
+      let parsedDate: string | undefined = date ? parseRelativeDate(date) : undefined;
+      let timeMin = parsedDate ? `${parsedDate}T00:00:00+05:30` : undefined;
+      let timeMax = parsedDate ? `${parsedDate}T23:59:59+05:30` : undefined;
+
+      let url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime`;
+      if (timeMin) url += `&timeMin=${encodeURIComponent(timeMin)}`;
+      if (timeMax) url += `&timeMax=${encodeURIComponent(timeMax)}`;
+
+      const result = await makeCalendarApiRequest(url);
+      const events = result.items || [];
+
+      // Find event(s) by attendee email (and optionally summary)
+      const matchingEvents = events.filter((event: any) => {
+        const attendees = event.attendees ? event.attendees.map((a: any) => a.email) : [];
+        const matchesEmail = attendees.includes(email);
+        const matchesSummary = summary ? event.summary === summary : true;
+        return matchesEmail && matchesSummary;
+      });
+
+      if (matchingEvents.length === 0) {
+        return {
+          content: [{ type: "text", text: `❌ No matching appointments found for ${email}${parsedDate ? " on " + formatDateForDisplay(parsedDate) : ""}${summary ? " with summary '" + summary + "'" : ""}.` }],
+        };
+      }
+
+      const event = matchingEvents[0]; // Just reschedule the first match
+      const parsedNewDate = parseRelativeDate(newDate);
+      const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
+      const newEndDateTime = `${parsedNewDate}T${newEndTime}:00`;
+
+      // Update the event
+      const updateBody = {
+        start: { dateTime: newStartDateTime, timeZone: "Asia/Kolkata" },
+        end: { dateTime: newEndDateTime, timeZone: "Asia/Kolkata" },
+      };
+
+      const updateResult = await makeCalendarApiRequest(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${event.id}`,
+        { method: "PATCH", body: JSON.stringify(updateBody) }
+      );
+
+      return {
+        content: [{
+          type: "text",
+          text: `🔄 Successfully rescheduled appointment '${event.summary || "Untitled Event"}' for ${email} to ${formatDateForDisplay(parsedNewDate)}, ${newStartTime} - ${newEndTime}.`
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `❌ Failed to reschedule appointment: ${error instanceof Error ? error.message : String(error)}` }],
+      };
+    }
+  }
+);
 	
 }
