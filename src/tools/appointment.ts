@@ -720,14 +720,24 @@ server.tool(
       const displayOriginalDate = formatDateForDisplay(parsedOriginalDate);
       const displayNewDate = formatDateForDisplay(parsedNewDate);
 
+      console.log(`Debug: Looking for original appointment on ${parsedOriginalDate} for ${normalizedEmail}`);
+
       // Step 1: Find the original appointment
       const timeMin = `${parsedOriginalDate}T00:00:00+05:30`;
       const timeMax = `${parsedOriginalDate}T23:59:59+05:30`;
 
-      const eventsResult = await makeCalendarApiRequest(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`
-      );
-      const events = eventsResult.items || [];
+      let eventsResult;
+      try {
+        eventsResult = await makeCalendarApiRequest(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`
+        );
+      } catch (apiError) {
+        console.error("Error fetching events:", apiError);
+        throw new Error(`Failed to fetch original appointment: ${apiError.message || "API request failed"}`);
+      }
+
+      const events = eventsResult?.items || [];
+      console.log(`Debug: Found ${events.length} events on ${parsedOriginalDate}`);
 
       originalEvent = events.find((event: any) =>
         Array.isArray(event.attendees) &&
@@ -739,11 +749,13 @@ server.tool(
           content: [
             {
               type: "text",
-              text: `⚠️ No original appointment found on ${displayOriginalDate} with attendee ${normalizedEmail}.`,
+              text: `⚠️ No original appointment found on ${displayOriginalDate} with attendee ${normalizedEmail}. Found ${events.length} total events on that date.`,
             },
           ],
         };
       }
+
+      console.log(`Debug: Found original event: ${originalEvent.summary || "Untitled"}`);
 
       // Step 2: Create new appointment first
       const newStartDateTime = `${parsedNewDate}T${startTime}:00+05:30`;
@@ -757,27 +769,45 @@ server.tool(
 
       const newEvent = {
         summary,
-        description,
+        description: description || "",
         start: { dateTime: newStartDateTime, timeZone: "Asia/Kolkata" },
         end: { dateTime: newEndDateTime, timeZone: "Asia/Kolkata" },
         attendees: [{ email: normalizedEmail }],
       };
 
-      const newEventResult = await makeCalendarApiRequest(
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-        {
-          method: "POST",
-          body: JSON.stringify(newEvent),
-        }
-      );
+      console.log(`Debug: Creating new event for ${parsedNewDate} ${startTime}-${endTime}`);
 
-      newEventId = newEventResult.id;
+      let newEventResult;
+      try {
+        newEventResult = await makeCalendarApiRequest(
+          "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(newEvent),
+          }
+        );
+      } catch (createError) {
+        console.error("Error creating new event:", createError);
+        throw new Error(`Failed to create new appointment: ${createError.message || "API request failed"}`);
+      }
+
+      newEventId = newEventResult?.id;
+      console.log(`Debug: Created new event with ID: ${newEventId}`);
 
       // Step 3: Delete the original appointment only after new one is successfully created
-      await makeCalendarApiRequest(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`,
-        { method: "DELETE" }
-      );
+      try {
+        await makeCalendarApiRequest(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`,
+          { method: "DELETE" }
+        );
+        console.log(`Debug: Successfully deleted original event: ${originalEvent.id}`);
+      } catch (deleteError) {
+        console.error("Error deleting original event:", deleteError);
+        throw new Error(`Failed to delete original appointment: ${deleteError.message || "API request failed"}`);
+      }
 
       return {
         content: [
@@ -792,12 +822,14 @@ server.tool(
               `👤 ${normalizedEmail}\n` +
               `📋 ${summary}\n` +
               (description ? `📝 ${description}\n` : "") +
-              (newEventResult.htmlLink ? `🔗 [View in Calendar](${newEventResult.htmlLink})` : ""),
+              (newEventResult?.htmlLink ? `🔗 [View in Calendar](${newEventResult.htmlLink})` : ""),
           },
         ],
       };
 
     } catch (err) {
+      console.error("Reschedule error:", err);
+      
       // Rollback: If we created a new event but failed to delete the original, clean up the new event
       if (newEventId) {
         try {
@@ -805,6 +837,7 @@ server.tool(
             `https://www.googleapis.com/calendar/v3/calendars/primary/events/${newEventId}`,
             { method: "DELETE" }
           );
+          console.log("Successfully rolled back new event");
         } catch (rollbackErr) {
           console.error("Failed to rollback new event:", rollbackErr);
         }
