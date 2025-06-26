@@ -383,7 +383,7 @@ export function registerAppointmentTools(server: McpServer) {
 		}
 	);
 	
-	// Schedule appointment tool (enhanced with relative date support)
+	// Schedule appointment tool (enhanced with relative date support and fixed attendees handling)
 	server.tool(
 		"scheduleAppointment",
 		"Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone, and includes today's date in the description). Supports relative dates like 'today', 'tomorrow', '10 days from now', etc.",
@@ -393,7 +393,25 @@ export function registerAppointmentTools(server: McpServer) {
 			date: z.string().describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
 			startTime: z.string().describe("Start time in HH:MM format (24-hour), e.g., '10:00'"),
 			endTime: z.string().describe("End time in HH:MM format (24-hour), e.g., '11:00'"),
-			attendees: z.array(z.object({ email: z.string() })).optional(),
+			// Fixed: Handle both array and string inputs for attendees
+			attendees: z.union([
+				z.array(z.object({ email: z.string() })),
+				z.string().transform((str) => {
+					try {
+						const parsed = JSON.parse(str);
+						if (Array.isArray(parsed)) {
+							return parsed.map((item: any) => ({ email: item.email || item }));
+						}
+						return [];
+					} catch {
+						// If it's a simple email string, wrap it in an array
+						if (str.includes('@')) {
+							return [{ email: str }];
+						}
+						return [];
+					}
+				})
+			]).default([]).describe("Array of attendee objects with email field, or JSON string representation"),
 			checkAvailability: z.union([z.boolean(), z.string()]).default(true).transform((val) => {
 				if (typeof val === 'string') {
 					return val.toLowerCase() === 'true';
