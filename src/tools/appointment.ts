@@ -615,4 +615,119 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 		}
 	);
+	server.tool(
+  "rescheduleAppointment",
+  "Cancel an existing appointment for a given attendee email on a specific date and reschedule it with new details.",
+  {
+    email: z.any().describe("Email of the attendee (can be a string or object like { email: string })"),
+    date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', etc."),
+    newSummary: z.string().min(1).describe("New appointment title/summary"),
+    newDescription: z.string().optional().describe("New appointment description (optional)"),
+    newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
+    newEndTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New end time in HH:MM format (24-hour)")
+  },
+  async ({
+    email,
+    date,
+    newSummary,
+    newDescription,
+    newStartTime,
+    newEndTime
+  }) => {
+    try {
+      // Normalize email input
+      const normalizedEmail = typeof email === "string"
+        ? email
+        : (email && typeof email === "object" && typeof email.email === "string")
+          ? email.email
+          : null;
+
+      if (!normalizedEmail || !normalizedEmail.includes("@")) {
+        throw new Error("Invalid email format provided.");
+      }
+
+      const parsedDate = parseRelativeDate(date);
+      const displayDate = formatDateForDisplay(parsedDate);
+
+      const timeMin = `${parsedDate}T00:00:00+05:30`;
+      const timeMax = `${parsedDate}T23:59:59+05:30`;
+
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${encodeURIComponent(timeMin)}&` +
+        `timeMax=${encodeURIComponent(timeMax)}&` +
+        `singleEvents=true&` +
+        `orderBy=startTime`;
+
+      const result = await makeCalendarApiRequest(url);
+      const events = result.items || [];
+
+      // Find event with the matching attendee
+      const targetEvent = events.find((event: any) =>
+        event.attendees?.some((att: any) => att.email === normalizedEmail)
+      );
+
+      if (!targetEvent) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ No event found on ${displayDate} with attendee ${normalizedEmail}.`,
+            },
+          ],
+        };
+      }
+
+      // Cancel the original event
+      await makeCalendarApiRequest(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${targetEvent.id}`,
+        { method: "DELETE" }
+      );
+
+      // Schedule the new event
+      const newStartDateTime = `${parsedDate}T${newStartTime}:00`;
+      const newEndDateTime = `${parsedDate}T${newEndTime}:00`;
+
+      const newEvent = {
+        summary: newSummary,
+        description: newDescription || `Rescheduled from: ${targetEvent.summary}`,
+        start: { dateTime: newStartDateTime, timeZone: "Asia/Kolkata" },
+        end: { dateTime: newEndDateTime, timeZone: "Asia/Kolkata" },
+        attendees: [{ email: normalizedEmail }],
+      };
+
+      const createResult = await makeCalendarApiRequest(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        {
+          method: "POST",
+          body: JSON.stringify(newEvent),
+        }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              `🔄 **Event Rescheduled!**\n\n` +
+              `🗓️ **Date:** ${displayDate}\n` +
+              `👤 **Attendee:** ${normalizedEmail}\n` +
+              `📋 **New Event:** ${newSummary}\n` +
+              `⏰ **Time:** ${newStartTime} - ${newEndTime}\n` +
+              (createResult.htmlLink ? `🔗 [View in Calendar](${createResult.htmlLink})` : "")
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ Unable to reschedule event. ${error instanceof Error ? error.message : 'Please try again.'}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
 }
