@@ -479,7 +479,7 @@ export function registerAppointmentTools(server: McpServer) {
 				z.array(z.string().email()),
 				z.string()
 			]).default([]).describe("Array of attendee email addresses or a JSON string of emails"),
-			checkAvailability: z.boolean().default(true).describe("Check if the time slot is available before scheduling"),
+			checkAvailability: z.coerce.boolean().default(true).describe("Check if the time slot is available before scheduling"),
 		},
 		async ({
 			summary,
@@ -806,7 +806,7 @@ server.tool(
    	newDate: z.string().min(1).describe("New date for the appointment in YYYY-MM-DD format or relative expression"),
    	newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
    	newEndTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New end time in HH:MM format (24-hour)"),
-   	checkAvailability: z.boolean().default(true).describe("Check if the new time slot is available"),
+   	checkAvailability: z.coerce.boolean().default(true).describe("Check if the new time slot is available"),
    },
    async ({ summary, currentDate, newDate, newStartTime, newEndTime, checkAvailability = true }) => {
    	try {
