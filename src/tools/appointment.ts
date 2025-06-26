@@ -162,34 +162,35 @@ function isTimeSlotAvailable(events: any[], startTime: string, endTime: string):
 	});
 }
 
-// Helper: Simplified attendee parsing
-function parseAttendees(attendees: any): Array<{ email: string }> {
+// Helper: Parse attendees from various input formats
+function parseAttendeesInput(attendees: any): string[] {
 	if (!attendees) return [];
 	
-	// If it's already an array of objects with email property
+	// If it's already an array
 	if (Array.isArray(attendees)) {
 		return attendees
 			.map(item => {
-				if (typeof item === 'object' && item.email) {
-					return { email: item.email };
-				}
-				if (typeof item === 'string' && item.includes('@')) {
-					return { email: item };
-				}
+				if (typeof item === 'string') return item;
+				if (typeof item === 'object' && item.email) return item.email;
 				return null;
 			})
-			.filter(Boolean) as Array<{ email: string }>;
+			.filter(Boolean) as string[];
 	}
 	
-	// If it's a string, try to parse as JSON or treat as single email
+	// If it's a string that looks like a JSON array
 	if (typeof attendees === 'string') {
 		try {
+			// Try to parse as JSON first
 			const parsed = JSON.parse(attendees);
-			return parseAttendees(parsed);
+			return parseAttendeesInput(parsed);
 		} catch {
-			// If it's a simple email string
+			// If JSON parsing fails, treat as a single email or comma-separated emails
 			if (attendees.includes('@')) {
-				return [{ email: attendees }];
+				// Split by comma and clean up
+				return attendees
+					.split(',')
+					.map(email => email.trim())
+					.filter(email => email.includes('@'));
 			}
 		}
 	}
@@ -474,7 +475,10 @@ export function registerAppointmentTools(server: McpServer) {
 			date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
 			startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("Start time in HH:MM format (24-hour), e.g., '10:00'"),
 			endTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("End time in HH:MM format (24-hour), e.g., '11:00'"),
-			attendees: z.array(z.string().email()).default([]).describe("Array of attendee email addresses"),
+			attendees: z.union([
+				z.array(z.string().email()),
+				z.string()
+			]).default([]).describe("Array of attendee email addresses or a JSON string of emails"),
 			checkAvailability: z.boolean().default(true).describe("Check if the time slot is available before scheduling"),
 		},
 		async ({
@@ -497,6 +501,9 @@ export function registerAppointmentTools(server: McpServer) {
 				if (!validateTimeFormat(startTime) || !validateTimeFormat(endTime)) {
 					throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
 				}
+				
+				// Parse attendees from various input formats
+				const parsedAttendees = parseAttendeesInput(attendees);
 				
 				// Construct full datetime strings
 				const startDateTime = `${parsedDate}T${startTime}:00`;
@@ -558,7 +565,7 @@ export function registerAppointmentTools(server: McpServer) {
 					description: fullDescription,
 					start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
 					end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-					attendees: attendees.map(email => ({ email })),
+					attendees: parsedAttendees.map(email => ({ email })),
 				};
 				
 				const result = await makeCalendarApiRequest(
@@ -578,8 +585,8 @@ export function registerAppointmentTools(server: McpServer) {
 					responseText += `📝 **Description:** ${description}\n`;
 				}
 				
-				if (attendees.length > 0) {
-					responseText += `👥 **Attendees:** ${attendees.join(', ')}\n`;
+				if (parsedAttendees.length > 0) {
+					responseText += `👥 **Attendees:** ${parsedAttendees.join(', ')}\n`;
 				}
 				
 				if (result.htmlLink) {
