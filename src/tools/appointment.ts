@@ -617,25 +617,98 @@ export function registerAppointmentTools(server: McpServer) {
 	);
 	server.tool(
   "rescheduleAppointment",
-  "Cancel an existing appointment for a given attendee email on a specific date and reschedule it with new details.",
+  "Create a new appointment with updated time and details.",
   {
-    email: z.any().describe("Email of the attendee (can be a string or object like { email: string })"),
-    date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', etc."),
-    newSummary: z.string().min(1).describe("New appointment title/summary"),
-    newDescription: z.string().optional().describe("New appointment description (optional)"),
-    newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
-    newEndTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New end time in HH:MM format (24-hour)")
+    email: z.any().describe("Attendee's email (can be string or object with 'email' field)"),
+    date: z.string().min(1).describe("New appointment date (YYYY-MM-DD or relative)"),
+    summary: z.string().min(1).describe("New event title"),
+    description: z.string().optional().describe("Optional description"),
+    startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("Start time (HH:MM)"),
+    endTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("End time (HH:MM)")
   },
   async ({
     email,
     date,
-    newSummary,
-    newDescription,
-    newStartTime,
-    newEndTime
+    summary,
+    description,
+    startTime,
+    endTime,
   }) => {
     try {
-      // Normalize email input
+      const normalizedEmail = typeof email === "string"
+        ? email
+        : (email && typeof email === "object" && typeof email.email === "string")
+          ? email.email
+          : null;
+
+      if (!normalizedEmail || !normalizedEmail.includes("@")) {
+        throw new Error("Invalid email format.");
+      }
+
+      const parsedDate = parseRelativeDate(date);
+      const displayDate = formatDateForDisplay(parsedDate);
+
+      const startDateTime = `${parsedDate}T${startTime}:00`;
+      const endDateTime = `${parsedDate}T${endTime}:00`;
+
+      const start = new Date(startDateTime);
+      const end = new Date(endDateTime);
+
+      if (end <= start) {
+        throw new Error("End time must be after start time.");
+      }
+
+      const event = {
+        summary,
+        description,
+        start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
+        end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
+        attendees: [{ email: normalizedEmail }],
+      };
+
+      const result = await makeCalendarApiRequest(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        {
+          method: "POST",
+          body: JSON.stringify(event),
+        }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              `✅ **Appointment Scheduled**\n\n` +
+              `📋 ${summary}\n` +
+              `📅 ${displayDate}\n` +
+              `⏰ ${startTime} - ${endTime}\n` +
+              `👤 ${normalizedEmail}\n` +
+              (result.htmlLink ? `🔗 [View in Calendar](${result.htmlLink})` : ""),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ Unable to reschedule. ${error instanceof Error ? error.message : 'Please try again later.'}`,
+          },
+        ],
+      };
+    }
+  }
+);
+	server.tool(
+  "cancelAppointment",
+  "Cancel an existing appointment based on attendee email and date.",
+  {
+    email: z.any().describe("Attendee's email (can be string or object with 'email' field)"),
+    date: z.string().min(1).describe("Date of the appointment (YYYY-MM-DD or relative format)"),
+  },
+  async ({ email, date }) => {
+    try {
       const normalizedEmail = typeof email === "string"
         ? email
         : (email && typeof email === "object" && typeof email.email === "string")
@@ -661,7 +734,6 @@ export function registerAppointmentTools(server: McpServer) {
       const result = await makeCalendarApiRequest(url);
       const events = result.items || [];
 
-      // Find event with the matching attendee
       const targetEvent = events.find((event: any) =>
         event.attendees?.some((att: any) => att.email === normalizedEmail)
       );
@@ -671,49 +743,22 @@ export function registerAppointmentTools(server: McpServer) {
           content: [
             {
               type: "text",
-              text: `❌ No event found on ${displayDate} with attendee ${normalizedEmail}.`,
+              text: `❌ No appointment found on ${displayDate} for ${normalizedEmail}.`,
             },
           ],
         };
       }
 
-      // Cancel the original event
       await makeCalendarApiRequest(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${targetEvent.id}`,
         { method: "DELETE" }
-      );
-
-      // Schedule the new event
-      const newStartDateTime = `${parsedDate}T${newStartTime}:00`;
-      const newEndDateTime = `${parsedDate}T${newEndTime}:00`;
-
-      const newEvent = {
-        summary: newSummary,
-        description: newDescription || `Rescheduled from: ${targetEvent.summary}`,
-        start: { dateTime: newStartDateTime, timeZone: "Asia/Kolkata" },
-        end: { dateTime: newEndDateTime, timeZone: "Asia/Kolkata" },
-        attendees: [{ email: normalizedEmail }],
-      };
-
-      const createResult = await makeCalendarApiRequest(
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-        {
-          method: "POST",
-          body: JSON.stringify(newEvent),
-        }
       );
 
       return {
         content: [
           {
             type: "text",
-            text:
-              `🔄 **Event Rescheduled!**\n\n` +
-              `🗓️ **Date:** ${displayDate}\n` +
-              `👤 **Attendee:** ${normalizedEmail}\n` +
-              `📋 **New Event:** ${newSummary}\n` +
-              `⏰ **Time:** ${newStartTime} - ${newEndTime}\n` +
-              (createResult.htmlLink ? `🔗 [View in Calendar](${createResult.htmlLink})` : "")
+            text: `🗑️ **Appointment Cancelled**\n\n📅 Date: ${displayDate}\n👤 Attendee: ${normalizedEmail}\n📋 Event: ${targetEvent.summary || "Untitled Event"}\n\nIt has been successfully removed from your calendar.`,
           },
         ],
       };
@@ -722,12 +767,13 @@ export function registerAppointmentTools(server: McpServer) {
         content: [
           {
             type: "text",
-            text: `❌ Unable to reschedule event. ${error instanceof Error ? error.message : 'Please try again.'}`,
+            text: `❌ Unable to cancel appointment. ${error instanceof Error ? error.message : 'Try again.'}`,
           },
         ],
       };
     }
   }
 );
+
 
 }
