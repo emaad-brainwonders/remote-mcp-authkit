@@ -101,7 +101,7 @@ export function registerAppointmentTools(server: McpServer) {
 				);
 			}
 			
-			const result = await response.json();
+			const result = await response.json() as { items?: any[] };
 			const events = result.items || [];
 			
 			if (events.length === 0) {
@@ -183,7 +183,7 @@ export function registerAppointmentTools(server: McpServer) {
 				);
 			}
 			
-			const result = await response.json();
+			const result = await response.json() as { items?: any[] };
 			const events = result.items || [];
 			
 			// Generate recommendations based on duration
@@ -283,7 +283,7 @@ export function registerAppointmentTools(server: McpServer) {
 				);
 				
 				if (checkResponse.ok) {
-					const checkResult = await checkResponse.json();
+					const checkResult = await checkResponse.json() as { items?: any[] };
 					const existingEvents = checkResult.items || [];
 					
 					if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime)) {
