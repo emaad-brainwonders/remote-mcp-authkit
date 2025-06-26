@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NxQTdY7-Ca6uw8DL7FSF2jZOoKRvJypo2qecQ8XeCrPebGqS-SQYGRud0dEBASzjLrIEeVv2J02R98j7J4clFbmFuuRL8elA2F94T-n1CJgTWIfDWdXma5mrE7iDw_PvGwtLcqjDFGcoo7PE7O8HF_je_5C5UuPsKCTJQaCgYKAX8SARQSFQHGX2MivFFajj2vlyz4pRygiJLRoQ0177";
+const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6Nx9ruRV9gZA2qeBuHIEW5bHVEDJc7oBxd7e8qQCr-g1D4kOIw5SoDvk2z-_rMD8bm8N9DwAj7vu2KQQN6sW4ac763QiEuSRHYL5KAp4BmDTKLbnJpWF9jXVhrfU6HZ-FwhBiYsPnQy_73f6KOB2zf0lFwH76ZoDtxSEaCgYKARoSARQSFQHGX2MiOjKniMdCUFFTQ36a7GXkBw0175";
 
 const getAccessToken = (): string => {
 	if (!HARDCODED_GOOGLE_ACCESS_TOKEN) {
