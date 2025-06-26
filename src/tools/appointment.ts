@@ -253,9 +253,9 @@ export function registerAppointmentTools(server: McpServer) {
 		"Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
 		{
 			date: z.string().describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', 'next week', etc."),
-			duration: z.number().default(1).describe("Duration in hours (default: 1 hour)"),
+			duration: z.number().default(0.5).describe("Duration in hours (default: 0.5 hours = 30 minutes)"),
 		},
-		async ({ date, duration = 1 }) => {
+		async ({ date, duration = 0.5 }) => {
 			const token = HARDCODED_GOOGLE_ACCESS_TOKEN;
 			
 			if (!token) throw new Error("Google OAuth access token is required.");
@@ -310,10 +310,24 @@ export function registerAppointmentTools(server: McpServer) {
 				{ start: 14, end: 17 }  // Afternoon
 			];
 			
+			// Convert duration to minutes for more precise slot generation
+			const durationMinutes = duration * 60;
+			const slotIntervalMinutes = 30; // Generate slots every 30 minutes
+			
 			for (const period of workingHours) {
-				for (let hour = period.start; hour <= period.end - duration; hour++) {
-					const startTime = `${parsedDate}T${hour.toString().padStart(2, '0')}:00:00`;
-					const endTime = `${parsedDate}T${(hour + duration).toString().padStart(2, '0')}:00:00`;
+				const startMinutes = period.start * 60; // Convert to minutes from midnight
+				const endMinutes = period.end * 60;
+				
+				// Generate slots at 30-minute intervals
+				for (let currentMinutes = startMinutes; currentMinutes <= endMinutes - durationMinutes; currentMinutes += slotIntervalMinutes) {
+					const startHour = Math.floor(currentMinutes / 60);
+					const startMinute = currentMinutes % 60;
+					const endTotalMinutes = currentMinutes + durationMinutes;
+					const endHour = Math.floor(endTotalMinutes / 60);
+					const endMinuteValue = endTotalMinutes % 60;
+					
+					const startTime = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+					const endTime = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinuteValue.toString().padStart(2, '0')}:00`;
 					
 					if (isTimeSlotAvailable(events, startTime, endTime)) {
 						const startFormatted = new Date(startTime).toLocaleTimeString('en-IN', { 
@@ -327,27 +341,42 @@ export function registerAppointmentTools(server: McpServer) {
 							timeZone: 'Asia/Kolkata'
 						});
 						
-						recommendations.push(`${startFormatted} - ${endFormatted} (${startTime} to ${endTime})`);
+						const durationText = duration === 1 ? '1 hour' : 
+										   duration === 0.5 ? '30 minutes' : 
+										   duration < 1 ? `${duration * 60} minutes` : 
+										   `${duration} hours`;
+						
+						recommendations.push(`${startFormatted} - ${endFormatted} (${durationText})`);
 					}
 				}
 			}
 			
 			if (recommendations.length === 0) {
+				const durationText = duration === 1 ? '1-hour' : 
+								   duration === 0.5 ? '30-minute' : 
+								   duration < 1 ? `${duration * 60}-minute` : 
+								   `${duration}-hour`;
+				
 				return {
 					content: [
 						{
 							type: "text",
-							text: `No available ${duration}-hour slots found for ${parsedDate} (interpreted from: "${date}") during working hours (9 AM - 12 PM, 2 PM - 5 PM IST)`,
+							text: `No available ${durationText} slots found for ${parsedDate} (interpreted from: "${date}") during working hours (9 AM - 12 PM, 2 PM - 5 PM IST)`,
 						},
 					],
 				};
 			}
 			
+			const durationText = duration === 1 ? '1-hour' : 
+							   duration === 0.5 ? '30-minute' : 
+							   duration < 1 ? `${duration * 60}-minute` : 
+							   `${duration}-hour`;
+			
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Available ${duration}-hour appointment slots for ${parsedDate} (interpreted from: "${date}"):\n${recommendations.join('\n')}`,
+						text: `Available ${durationText} appointment slots for ${parsedDate} (interpreted from: "${date}"):\n${recommendations.join('\n')}`,
 					},
 				],
 			};
