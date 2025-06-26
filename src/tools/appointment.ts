@@ -615,5 +615,4 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 		}
 	);
-	
 }
