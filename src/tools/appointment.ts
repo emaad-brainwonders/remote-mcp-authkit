@@ -615,7 +615,82 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 		}
 	);
-	server.tool(
+	// Cancel an appointment by attendee email and date
+server.tool(
+  "cancelAppointment",
+  "Cancel an appointment by attendee email and date.",
+  {
+    email: z.any().describe("Attendee email (string or object with `email` field)"),
+    date: z.string().min(1).describe("Date of the event (YYYY-MM-DD or relative format)"),
+  },
+  async ({ email, date }) => {
+    try {
+      const normalizedEmail = typeof email === "string"
+        ? email
+        : email?.email || null;
+
+      if (!normalizedEmail || !normalizedEmail.includes("@")) {
+        throw new Error("Invalid email input.");
+      }
+
+      const parsedDate = parseRelativeDate(date);
+      const displayDate = formatDateForDisplay(parsedDate);
+
+      const timeMin = `${parsedDate}T00:00:00+05:30`;
+      const timeMax = `${parsedDate}T23:59:59+05:30`;
+
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${encodeURIComponent(timeMin)}&` +
+        `timeMax=${encodeURIComponent(timeMax)}&` +
+        `singleEvents=true&orderBy=startTime`;
+
+      const result = await makeCalendarApiRequest(url);
+      const events = result.items || [];
+
+      const matchingEvent = events.find((event: any) =>
+        Array.isArray(event.attendees) &&
+        event.attendees.some((att: any) => att.email === normalizedEmail)
+      );
+
+      if (!matchingEvent) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `⚠️ No event found on ${displayDate} with attendee ${normalizedEmail}.`,
+            },
+          ],
+        };
+      }
+
+      await makeCalendarApiRequest(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${matchingEvent.id}`,
+        { method: "DELETE" }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `🗑️ **Appointment cancelled** for ${normalizedEmail} on ${displayDate}.\n📋 Event: ${matchingEvent.summary || "Untitled"}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ Failed to cancel appointment: ${err instanceof Error ? err.message : "Unknown error."}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Reschedule appointment: cancel original and create new one
+server.tool(
   "rescheduleAppointment",
   "Cancel an existing appointment and schedule a new one in GMT+5:30 timezone.",
   {
@@ -648,7 +723,7 @@ export function registerAppointmentTools(server: McpServer) {
       );
       const events = eventsResult.items || [];
 
-      const originalEvent = events.find(event =>
+      const originalEvent = events.find((event: any) =>
         Array.isArray(event.attendees) &&
         event.attendees.some((att: any) => att.email === normalizedEmail)
       );
@@ -709,78 +784,7 @@ export function registerAppointmentTools(server: McpServer) {
     }
   }
 );
-server.tool(
-  "cancelAppointment",
-  "Cancel an appointment by attendee email and date.",
-  {
-    email: z.any().describe("Attendee email (string or object with `email` field)"),
-    date: z.string().min(1).describe("Date of the event (YYYY-MM-DD or relative format)"),
-  },
-  async ({ email, date }) => {
-    try {
-      const normalizedEmail = typeof email === "string"
-        ? email
-        : email?.email || null;
 
-      if (!normalizedEmail || !normalizedEmail.includes("@")) {
-        throw new Error("Invalid email input.");
-      }
-
-      const parsedDate = parseRelativeDate(date);
-      const displayDate = formatDateForDisplay(parsedDate);
-
-      const timeMin = `${parsedDate}T00:00:00+05:30`;
-      const timeMax = `${parsedDate}T23:59:59+05:30`;
-
-      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-        `timeMin=${encodeURIComponent(timeMin)}&` +
-        `timeMax=${encodeURIComponent(timeMax)}&` +
-        `singleEvents=true&orderBy=startTime`;
-
-      const result = await makeCalendarApiRequest(url);
-      const events = result.items || [];
-
-      const matchingEvent = events.find(event =>
-        Array.isArray(event.attendees) &&
-        event.attendees.some((att: any) => att.email === normalizedEmail)
-      );
-
-      if (!matchingEvent) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `⚠️ No event found on ${displayDate} with attendee ${normalizedEmail}.`,
-            },
-          ],
-        };
-      }
-
-      await makeCalendarApiRequest(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${matchingEvent.id}`,
-        { method: "DELETE" }
-      );
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `🗑️ **Appointment cancelled** for ${normalizedEmail} on ${displayDate}.\n📋 Event: ${matchingEvent.summary || "Untitled"}`,
-          },
-        ],
-      };
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `❌ Failed to cancel appointment: ${err instanceof Error ? err.message : "Unknown error."}`,
-          },
-        ],
-      };
-    }
-  }
-);
 
 
 
