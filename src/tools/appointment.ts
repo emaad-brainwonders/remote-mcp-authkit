@@ -689,19 +689,23 @@ server.tool(
   }
 );
 
-// Reschedule appointment: cancel original and create new one
+// Reschedule appointment: create new appointment first, then cancel original
 server.tool(
   "rescheduleAppointment",
-  "Cancel an existing appointment and schedule a new one in GMT+5:30 timezone.",
+  "Reschedule an existing appointment by creating a new one and then canceling the original in GMT+5:30 timezone.",
   {
     email: z.any().describe("Attendee email (string or object with `email` field)"),
-    date: z.string().min(1).describe("Original appointment date (YYYY-MM-DD or relative)"),
+    originalDate: z.string().min(1).describe("Original appointment date (YYYY-MM-DD or relative)"),
+    newDate: z.string().min(1).describe("New appointment date (YYYY-MM-DD or relative)"),
     summary: z.string().min(1).describe("New event summary"),
     description: z.string().optional().describe("Optional description"),
     startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("Start time (HH:MM)"),
     endTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("End time (HH:MM)"),
   },
-  async ({ email, date, summary, description, startTime, endTime }) => {
+  async ({ email, originalDate, newDate, summary, description, startTime, endTime }) => {
+    let newEventId = null;
+    let originalEvent = null;
+
     try {
       const normalizedEmail = typeof email === "string"
         ? email
@@ -711,37 +715,45 @@ server.tool(
         throw new Error("Invalid email.");
       }
 
-      const parsedDate = parseRelativeDate(date);
-      const displayDate = formatDateForDisplay(parsedDate);
+      const parsedOriginalDate = parseRelativeDate(originalDate);
+      const parsedNewDate = parseRelativeDate(newDate);
+      const displayOriginalDate = formatDateForDisplay(parsedOriginalDate);
+      const displayNewDate = formatDateForDisplay(parsedNewDate);
 
-      // Step 1: Cancel any existing appointment
-      const timeMin = `${parsedDate}T00:00:00+05:30`;
-      const timeMax = `${parsedDate}T23:59:59+05:30`;
+      // Step 1: Find the original appointment
+      const timeMin = `${parsedOriginalDate}T00:00:00+05:30`;
+      const timeMax = `${parsedOriginalDate}T23:59:59+05:30`;
 
       const eventsResult = await makeCalendarApiRequest(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`
       );
       const events = eventsResult.items || [];
 
-      const originalEvent = events.find((event: any) =>
+      originalEvent = events.find((event: any) =>
         Array.isArray(event.attendees) &&
         event.attendees.some((att: any) => att.email === normalizedEmail)
       );
 
-      if (originalEvent) {
-        await makeCalendarApiRequest(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`,
-          { method: "DELETE" }
-        );
+      if (!originalEvent) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `⚠️ No original appointment found on ${displayOriginalDate} with attendee ${normalizedEmail}.`,
+            },
+          ],
+        };
       }
 
-      // Step 2: Schedule new appointment
-      const newStartDateTime = `${parsedDate}T${startTime}:00+05:30`;
-      const newEndDateTime = `${parsedDate}T${endTime}:00+05:30`;
+      // Step 2: Create new appointment first
+      const newStartDateTime = `${parsedNewDate}T${startTime}:00+05:30`;
+      const newEndDateTime = `${parsedNewDate}T${endTime}:00+05:30`;
 
       const start = new Date(newStartDateTime);
       const end = new Date(newEndDateTime);
-      if (end <= start) throw new Error("End time must be after start time.");
+      if (end <= start) {
+        throw new Error("End time must be after start time.");
+      }
 
       const newEvent = {
         summary,
@@ -751,7 +763,7 @@ server.tool(
         attendees: [{ email: normalizedEmail }],
       };
 
-      const result = await makeCalendarApiRequest(
+      const newEventResult = await makeCalendarApiRequest(
         "https://www.googleapis.com/calendar/v3/calendars/primary/events",
         {
           method: "POST",
@@ -759,33 +771,56 @@ server.tool(
         }
       );
 
+      newEventId = newEventResult.id;
+
+      // Step 3: Delete the original appointment only after new one is successfully created
+      await makeCalendarApiRequest(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`,
+        { method: "DELETE" }
+      );
+
       return {
         content: [
           {
             type: "text",
             text:
-              `🔁 **Appointment Rescheduled (GMT+5:30)**\n\n📅 ${displayDate}\n` +
+              `🔁 **Appointment Successfully Rescheduled (GMT+5:30)**\n\n` +
+              `❌ **Cancelled:** ${originalEvent.summary || "Untitled"} on ${displayOriginalDate}\n` +
+              `✅ **New Appointment:**\n` +
+              `📅 ${displayNewDate}\n` +
               `⏰ ${startTime} - ${endTime}\n` +
               `👤 ${normalizedEmail}\n` +
               `📋 ${summary}\n` +
-              (result.htmlLink ? `🔗 [View in Calendar](${result.htmlLink})` : ""),
+              (description ? `📝 ${description}\n` : "") +
+              (newEventResult.htmlLink ? `🔗 [View in Calendar](${newEventResult.htmlLink})` : ""),
           },
         ],
       };
+
     } catch (err) {
+      // Rollback: If we created a new event but failed to delete the original, clean up the new event
+      if (newEventId) {
+        try {
+          await makeCalendarApiRequest(
+            `https://www.googleapis.com/calendar/v3/calendars/primary/events/${newEventId}`,
+            { method: "DELETE" }
+          );
+        } catch (rollbackErr) {
+          console.error("Failed to rollback new event:", rollbackErr);
+        }
+      }
+
       return {
         content: [
           {
             type: "text",
-            text: `❌ Failed to reschedule: ${err instanceof Error ? err.message : "Unknown error."}`,
+            text: `❌ Failed to reschedule appointment: ${err instanceof Error ? err.message : "Unknown error."}`,
           },
         ],
       };
     }
   }
 );
-
-
 
 
 }
