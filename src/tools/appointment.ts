@@ -150,6 +150,31 @@ function generateTimeSlotRecommendations(events: any[], date: string): string[] 
 	return recommendations;
 }
 
+// Helper: Parse attendees from string or array
+function parseAttendees(attendeesInput: string | Array<{email: string}>): Array<{email: string}> {
+	if (Array.isArray(attendeesInput)) {
+		return attendeesInput;
+	}
+	
+	if (typeof attendeesInput === 'string') {
+		try {
+			const parsed = JSON.parse(attendeesInput);
+			if (Array.isArray(parsed)) {
+				return parsed;
+			}
+		} catch (error) {
+			// If JSON parsing fails, try to extract email addresses from the string
+			const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+			const emails = attendeesInput.match(emailRegex);
+			if (emails) {
+				return emails.map(email => ({ email }));
+			}
+		}
+	}
+	
+	return [];
+}
+
 export function registerAppointmentTools(server: McpServer) {
 	// Get schedule for a specific date (now supports relative dates)
 	server.tool(
@@ -383,7 +408,7 @@ export function registerAppointmentTools(server: McpServer) {
 		}
 	);
 	
-	// Schedule appointment tool (enhanced with relative date support)
+	// Schedule appointment tool (enhanced with relative date support and flexible attendees parsing)
 	server.tool(
 		"scheduleAppointment",
 		"Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone, and includes today's date in the description). Supports relative dates like 'today', 'tomorrow', '10 days from now', etc.",
@@ -393,7 +418,10 @@ export function registerAppointmentTools(server: McpServer) {
 			date: z.string().describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
 			startTime: z.string().describe("Start time in HH:MM format (24-hour), e.g., '10:00'"),
 			endTime: z.string().describe("End time in HH:MM format (24-hour), e.g., '11:00'"),
-			attendees: z.array(z.object({ email: z.string() })).optional(),
+			attendees: z.union([
+				z.array(z.object({ email: z.string() })),
+				z.string()
+			]).optional().describe("Array of attendee objects with email, or JSON string, or comma-separated emails"),
 			checkAvailability: z.union([z.boolean(), z.string()]).default(true).transform((val) => {
 				if (typeof val === 'string') {
 					return val.toLowerCase() === 'true';
@@ -407,7 +435,7 @@ export function registerAppointmentTools(server: McpServer) {
 			date,
 			startTime,
 			endTime,
-			attendees = [],
+			attendees,
 			checkAvailability = true,
 		}) => {
 			const token = HARDCODED_GOOGLE_ACCESS_TOKEN;
@@ -428,6 +456,23 @@ export function registerAppointmentTools(server: McpServer) {
 						},
 					],
 				};
+			}
+			
+			// Parse attendees if provided
+			let parsedAttendees: Array<{email: string}> = [];
+			if (attendees) {
+				try {
+					parsedAttendees = parseAttendees(attendees);
+				} catch (error) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error parsing attendees: ${error instanceof Error ? error.message : 'Invalid attendees format'}`,
+							},
+						],
+					};
+				}
 			}
 			
 			// Construct full datetime strings
@@ -479,7 +524,7 @@ export function registerAppointmentTools(server: McpServer) {
 				description: fullDescription,
 				start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
 				end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-				attendees,
+				attendees: parsedAttendees,
 			};
 			
 			const response = await fetch(
@@ -502,11 +547,14 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 			
 			const result = (await response.json()) as { htmlLink?: string };
+			const attendeeInfo = parsedAttendees.length > 0 ? 
+				` with attendees: ${parsedAttendees.map(a => a.email).join(', ')}` : '';
+			
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Appointment successfully created for ${parsedDate} (interpreted from: "${date}") from ${startTime} to ${endTime}: ${result.htmlLink}`,
+						text: `Appointment successfully created for ${parsedDate} (interpreted from: "${date}") from ${startTime} to ${endTime}${attendeeInfo}: ${result.htmlLink}`,
 					},
 				],
 			};
