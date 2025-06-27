@@ -216,7 +216,7 @@ function parseAttendeesInput(attendees: any): string[] {
 // Helper: Make API request with better error handling
 async function makeCalendarApiRequest(url: string, options: RequestInit = {}): Promise<any> {
 	try {
-		const token = getAccessToken();
+		const token = HARDCODED_GOOGLE_ACCESS_TOKEN ;
 		
 		const response = await fetch(url, {
 			...options,
