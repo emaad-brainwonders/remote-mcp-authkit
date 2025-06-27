@@ -144,19 +144,22 @@ function validateTimeFormat(time: string): boolean {
 }
 
 // Helper: Check if a time slot is available
-function isTimeSlotAvailable(events: any[], proposedStart: string, proposedEnd: string): boolean {
-  const proposedStartTime = new Date(proposedStart).getTime();
-  const proposedEndTime = new Date(proposedEnd).getTime();
+function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
+  const startTime = new Date(meetingStart).getTime();
+  const endTime = new Date(meetingEnd).getTime();
+  const bufferEndTime = endTime + bufferMinutes * 60 * 1000;
 
   for (const event of events) {
     const eventStart = new Date(event.start?.dateTime || event.start?.date).getTime();
     const eventEnd = new Date(event.end?.dateTime || event.end?.date).getTime();
 
-    const isOverlap = proposedStartTime < eventEnd && proposedEndTime > eventStart;
+    // Check if any event overlaps with [startTime → bufferEndTime]
+    const isOverlap = startTime < eventEnd && bufferEndTime > eventStart;
     if (isOverlap) return false;
   }
   return true;
 }
+
 
 // Helper: Parse attendees from various input formats
 function parseAttendeesInput(attendees: any): string[] {
@@ -553,7 +556,7 @@ server.tool(
         const checkResult = await makeCalendarApiRequest(checkUrl);
         const existingEvents = checkResult.items || [];
 
-        if (!isTimeSlotAvailable(existingEvents, startDateTime, bufferEndTime)) {
+        if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime, 15)) {
           return {
             content: [
               {
