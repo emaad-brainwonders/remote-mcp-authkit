@@ -50,13 +50,6 @@ interface SendAppointmentEmailParams {
 	customMessage?: string;
 }
 
-interface SendCustomEmailParams {
-	to: string;
-	subject: string;
-	message: string;
-	includeSignature: boolean;
-}
-
 // Helper function to send email via Gmail API
 async function sendGmailEmail(to: string, subject: string, body: string): Promise<any> {
 	const email = [
@@ -150,7 +143,8 @@ Support Team`;
 			throw new Error(`Unknown email type: ${emailType}`);
 	}
 
-	return await sendGmailEmail(to, subject, body);
+	const result = await sendGmailEmail(to, subject, body);
+	return { result, subject };
 }
 
 // MCP Server tools
@@ -172,7 +166,7 @@ export function registerEmailTools(server: any) {
 		},
 		async ({ to, emailType, appointmentDetails, customMessage }: SendAppointmentEmailParams) => {
 			try {
-				const result = await sendAppointmentEmail({ to, emailType, appointmentDetails, customMessage });
+				const { result, subject } = await sendAppointmentEmail({ to, emailType, appointmentDetails, customMessage });
 
 				return {
 					content: [{
@@ -199,54 +193,6 @@ Please check:
 • Email address format
 • Gmail API access token
 • Network connectivity`
-					}]
-				};
-			}
-		}
-	);
-
-	// Send custom email
-	server.tool(
-		"sendCustomEmail",
-		"Send a custom email to appointment attendees",
-		{
-			to: z.string().email().describe("Recipient email address"),
-			subject: z.string().min(1).describe("Email subject line"),
-			message: z.string().min(1).describe("Email message body"),
-			includeSignature: z.boolean().default(true).describe("Include company signature"),
-		},
-		async ({ to, subject, message, includeSignature }: SendCustomEmailParams) => {
-			try {
-				let finalMessage = message;
-
-				if (includeSignature) {
-					finalMessage += `\n\nBest regards,\nSupport Team`;
-				}
-
-				const result = await sendGmailEmail(to, subject, finalMessage);
-
-				return {
-					content: [{
-						type: "text",
-						text: `✅ **Custom email sent successfully!**
-
-📧 **To:** ${to}
-📋 **Subject:** ${subject}
-📤 **Message ID:** ${result.id}
-
-Your custom message has been delivered.`
-					}]
-				};
-
-			} catch (error) {
-				return {
-					content: [{
-						type: "text",
-						text: `❌ **Failed to send custom email**
-
-${error instanceof Error ? error.message : 'Unknown error occurred'}
-
-Please verify the email details and try again.`
 					}]
 				};
 			}
