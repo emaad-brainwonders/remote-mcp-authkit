@@ -796,7 +796,7 @@ server.tool(
    }
 );
 
-// Updated Reschedule Appointment Tool
+// Reschedule Appointment Tool (supports user info)
 server.tool(
    "rescheduleAppointment",
    "Reschedule an existing appointment to a new date and time using summary or user info",
@@ -935,5 +935,35 @@ server.tool(
       }
    }
 );
+
+// Get User Appointments Tool
+server.tool(
+    "getUserAppointments",
+    "Get upcoming appointments for a user by name, email, or phone",
+    {
+        userName: z.string().optional().describe("User's full name (optional)"),
+        userEmail: z.string().email().optional().describe("User's email address (optional)"),
+        userPhone: z.string().optional().describe("User's phone number (optional)"),
+    },
+    async ({ userName, userEmail, userPhone }) => {
+        // Fetch all upcoming events (next 30 days)
+        const now = new Date().toISOString();
+        const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&timeMax=${encodeURIComponent(future)}&singleEvents=true&orderBy=startTime`;
+        const result = await makeCalendarApiRequest(url);
+        const events = (result.items || []).filter(event => eventMatchesUser(event, { userName, userEmail, userPhone }));
+        if (events.length === 0) {
+            return { content: [{ type: "text", text: "No upcoming appointments found for the provided information." }] };
+        }
+        const list = events.map(event => {
+            const date = event.start?.dateTime
+                ? new Date(event.start.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+                : event.start?.date;
+            return `- ${event.summary || "No Title"} on ${date}`;
+        }).join('\n');
+        return { content: [{ type: "text", text: `Your upcoming appointments:\n${list}` }] };
+    }
+);
+
 	
 }
