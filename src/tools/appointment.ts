@@ -670,6 +670,9 @@ export function registerAppointmentTools(server: McpServer) {
 	);
 
 
+// ... (existing imports, helpers, and other tools above)
+
+// Cancel Appointment Tool (supports user info, NO confirmation step)
 server.tool(
    "cancelAppointment",
    "Cancel an existing appointment from Google Calendar by searching for it by title, date, or user info",
@@ -679,10 +682,9 @@ server.tool(
       userName: z.string().optional().describe("Full name of the person booking the appointment (optional)"),
       userEmail: z.string().email().optional().describe("Email address of the person booking (optional)"),
       userPhone: z.string().optional().describe("Phone number of the person booking (optional)"),
-      exactMatch: z.coerce.boolean().default(false).describe("Whether to require exact title match (default: false for partial matching)"),
-      confirmationRequired: z.coerce.boolean().default(false).describe("Whether to require confirmation before canceling (default: false)"),
+      exactMatch: z.coerce.boolean().default(false).describe("Whether to require exact title match (default: false for partial matching)")
    },
-   async ({ summary, date, userName, userEmail, userPhone, exactMatch = false, confirmationRequired = false }) => {
+   async ({ summary, date, userName, userEmail, userPhone, exactMatch = false }) => {
       try {
          // Use date if provided, otherwise search for upcoming events
          let events: any[] = [];
@@ -726,7 +728,7 @@ server.tool(
             };
          }
          if (matchingEvents.length > 1) {
-            const matchList = matchingEvents.map((event, index) => {
+            const matchList = matchingEvents.map((event: any, index: number) => {
                const start = event.start?.dateTime || event.start?.date;
                let timeString = 'All day';
                if (start && start.includes('T')) {
@@ -758,16 +760,7 @@ server.tool(
                timeZone: 'Asia/Kolkata'
             });
          }
-         if (confirmationRequired) {
-            return {
-               content: [
-                  {
-                     type: "text",
-                     text: `⚠️ **Confirm Cancellation**\n\n📋 **Event:** ${eventToCancel.summary}\n📅 **Date:** ${displayDate}\n⏰ **Time:** ${timeString}\n🔗 **Event ID:** ${eventToCancel.id}\n\n❓ Are you sure you want to cancel this appointment? This action cannot be undone.\n\n💡 To proceed with cancellation, call this function again with confirmationRequired=false.`,
-                  },
-               ],
-            };
-         }
+
          const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToCancel.id}`;
          await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
          return {
@@ -795,6 +788,8 @@ server.tool(
       }
    }
 );
+
+// ... (rest of your appointment tools and helpers)
 
 // Reschedule Appointment Tool (supports user info)
 server.tool(
