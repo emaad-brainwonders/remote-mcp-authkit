@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { sendAppointmentEmail } from "./mail"; // Import the email function
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getEnv, getGoogleAccessToken } from "../env";
 
+const HARDCODED_GOOGLE_ACCESS_TOKEN = getGoogleAccessToken();
 
-
-// WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN = env.GOOGLE_ACCESS_TOKEN;
 
 const getAccessToken = (): string => {
 	if (!HARDCODED_GOOGLE_ACCESS_TOKEN) {
