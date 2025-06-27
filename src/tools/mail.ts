@@ -48,6 +48,51 @@ Thank you.`
 	}
 };
 
+// Type definitions
+type EmailType = 'created' | 'cancelled' | 'rescheduled';
+
+interface AppointmentDetails {
+	summary: string;
+	date: string;
+	time: string;
+	userName?: string;
+}
+
+interface AppointmentDetailsWithDateTime {
+	summary: string;
+	dateTime: string;
+	userName?: string;
+}
+
+interface Reminders {
+	oneHour: boolean;
+	thirtyMinutes: boolean;
+}
+
+interface SendAppointmentEmailParams {
+	to: string;
+	emailType: EmailType;
+	appointmentDetails: AppointmentDetails;
+	customMessage?: string;
+}
+
+interface ScheduleAppointmentRemindersParams {
+	to: string;
+	appointmentDetails: AppointmentDetailsWithDateTime;
+	reminders: Reminders;
+}
+
+interface SendCustomEmailParams {
+	to: string;
+	subject: string;
+	message: string;
+	includeSignature: boolean;
+}
+
+interface CancelScheduledRemindersParams {
+	scheduleIds: string[];
+}
+
 // Helper function to send email via Gmail API
 async function sendGmailEmail(to: string, subject: string, body: string): Promise<any> {
 	const email = [
@@ -109,7 +154,7 @@ export function registerEmailTools(server: any) {
 			}).describe("Appointment details for the email"),
 			customMessage: z.string().optional().describe("Additional custom message to include"),
 		},
-		async ({ to, emailType, appointmentDetails, customMessage }) => {
+		async ({ to, emailType, appointmentDetails, customMessage }: SendAppointmentEmailParams) => {
 			try {
 				let template;
 				let subject;
@@ -220,7 +265,7 @@ Please check:
 				thirtyMinutes: z.boolean().default(true).describe("Send 30-minute reminder"),
 			}).default({ oneHour: true, thirtyMinutes: true }).describe("Which reminders to schedule"),
 		},
-		async ({ to, appointmentDetails, reminders }) => {
+		async ({ to, appointmentDetails, reminders }: ScheduleAppointmentRemindersParams) => {
 			try {
 				const appointmentTime = new Date(appointmentDetails.dateTime);
 				const now = new Date();
@@ -338,7 +383,7 @@ Please check:
 			message: z.string().min(1).describe("Email message body"),
 			includeSignature: z.boolean().default(true).describe("Include company signature"),
 		},
-		async ({ to, subject, message, includeSignature }) => {
+		async ({ to, subject, message, includeSignature }: SendCustomEmailParams) => {
 			try {
 				let finalMessage = message;
 				
@@ -383,7 +428,7 @@ Please verify the email details and try again.`
 		{
 			scheduleIds: z.array(z.string()).describe("Array of schedule IDs to cancel"),
 		},
-		async ({ scheduleIds }) => {
+		async ({ scheduleIds }: CancelScheduledRemindersParams) => {
 			try {
 				// In a real implementation, you'd remove these from your queue/storage
 				const cancelledIds = [];
