@@ -479,16 +479,14 @@ export function registerAppointmentTools(server: McpServer) {
 		// Appointment Details
 		summary: z.string().min(1).describe("Appointment title/summary"),
 		description: z.string().optional().describe("Appointment description (optional)"),
-		appointmentType: z.enum(['online', 'offline', 'hybrid']).describe("Type of appointment: 'online' for virtual meetings, 'offline' for in-person meetings, 'hybrid' for mixed format"),
+		appointmentType: z.enum(['online', 'offline']).describe("Type of appointment: 'online' for virtual meetings, 'offline' for in-person meetings"),
 		
-		// Location/Meeting Details (conditional based on type)
-		location: z.string().optional().describe("Physical address for offline appointments or meeting platform (Zoom, Teams, etc.) for online appointments"),
-		meetingLink: z.string().url().optional().describe("Meeting link for online appointments (Zoom, Teams, Meet, etc.)"),
+		// Meeting Details for online appointments only
+		meetingLink: z.string().url().optional().describe("Meeting link for online appointments (Zoom, Teams, Meet, etc.)");
 		
 		// Date and Time
 		date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
-		startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("Start time in HH:MM format (24-hour), e.g., '10:00'"),
-		endTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("End time in HH:MM format (24-hour), e.g., '11:00'"),
+		startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("Start time in HH:MM format (24-hour), e.g., '10:00' - appointment will be automatically set to 45 minutes duration"),
 		
 		// Additional attendees (optional)
 		attendees: z.union([
@@ -508,11 +506,9 @@ export function registerAppointmentTools(server: McpServer) {
 		summary,
 		description,
 		appointmentType,
-		location,
 		meetingLink,
 		date,
 		startTime,
-		endTime,
 		attendees = [],
 		checkAvailability = true,
 		sendReminder = true,
@@ -526,17 +522,13 @@ export function registerAppointmentTools(server: McpServer) {
 			const displayDate = formatDateForDisplay(parsedDate);
 			
 			// Validate time format (additional check)
-			if (!validateTimeFormat(startTime) || !validateTimeFormat(endTime)) {
+			if (!validateTimeFormat(startTime)) {
 				throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
 			}
 			
 			// Validate appointment type specific requirements
-			if (appointmentType === 'online' && !meetingLink && !location) {
-				throw new Error("Online appointments require either a meeting link or platform specification");
-			}
-			
-			if (appointmentType === 'offline' && !location) {
-				throw new Error("Offline appointments require a physical location/address");
+			if (appointmentType === 'online' && !meetingLink) {
+				throw new Error("Online appointments require a meeting link");
 			}
 			
 			// Validate phone number format (basic validation)
@@ -553,17 +545,13 @@ export function registerAppointmentTools(server: McpServer) {
 				arr.indexOf(email) === index // Remove duplicates
 			);
 			
+			// Calculate end time (45 minutes from start time)
+			const startDate = new Date(`${parsedDate}T${startTime}:00`);
+			const endDate = new Date(startDate.getTime() + 45 * 60 * 1000); // Add 45 minutes
+			
 			// Construct full datetime strings
 			const startDateTime = `${parsedDate}T${startTime}:00`;
-			const endDateTime = `${parsedDate}T${endTime}:00`;
-			
-			// Validate that end time is after start time
-			const startDate = new Date(startDateTime);
-			const endDate = new Date(endDateTime);
-			
-			if (endDate <= startDate) {
-				throw new Error("End time must be after start time");
-			}
+			const endDateTime = endDate.toISOString().slice(0, 19); // Format: YYYY-MM-DDTHH:mm:ss
 			
 			// Format times for display
 			const displayStartTime = startDate.toLocaleTimeString('en-IN', { 
@@ -612,25 +600,12 @@ export function registerAppointmentTools(server: McpServer) {
 				``,
 				`📋 **Appointment Details:**`,
 				`Type: ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting`,
+				`Duration: 45 minutes`,
 			];
 			
-			// Add location/meeting details based on type
-			if (appointmentType === 'online') {
-				if (meetingLink) {
-					appointmentDetails.push(`Meeting Link: ${meetingLink}`);
-				}
-				if (location) {
-					appointmentDetails.push(`Platform: ${location}`);
-				}
-			} else if (appointmentType === 'offline') {
-				appointmentDetails.push(`Location: ${location}`);
-			} else if (appointmentType === 'hybrid') {
-				if (location) {
-					appointmentDetails.push(`Primary Location: ${location}`);
-				}
-				if (meetingLink) {
-					appointmentDetails.push(`Backup Meeting Link: ${meetingLink}`);
-				}
+			// Add meeting link for online appointments
+			if (appointmentType === 'online' && meetingLink) {
+				appointmentDetails.push(`Meeting Link: ${meetingLink}`);
 			}
 			
 			if (description) {
@@ -648,7 +623,6 @@ export function registerAppointmentTools(server: McpServer) {
 				start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
 				end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
 				attendees: allAttendees.map(email => ({ email })),
-				location: appointmentType === 'offline' ? location : (appointmentType === 'online' && meetingLink ? meetingLink : ''),
 				reminders: sendReminder ? {
 					useDefault: false,
 					overrides: [
@@ -657,16 +631,6 @@ export function registerAppointmentTools(server: McpServer) {
 					],
 				} : undefined,
 			};
-			
-			// Add conference data for online meetings
-			if (appointmentType === 'online' && meetingLink) {
-				event.conferenceData = {
-					createRequest: {
-						requestId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-						conferenceSolutionKey: { type: 'hangoutsMeet' }
-					}
-				};
-			}
 			
 			// Schedule the appointment
 			const result = await makeCalendarApiRequest(
@@ -684,16 +648,11 @@ export function registerAppointmentTools(server: McpServer) {
 			responseText += `📱 **Phone:** ${userPhone}\n\n`;
 			responseText += `📋 **Event:** ${summary}\n`;
 			responseText += `📅 **Date:** ${displayDate}\n`;
-			responseText += `⏰ **Time:** ${displayStartTime} - ${displayEndTime}\n`;
+			responseText += `⏰ **Time:** ${displayStartTime} - ${displayEndTime} (45 minutes)\n`;
 			responseText += `🔗 **Type:** ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting\n`;
 			
-			if (appointmentType === 'offline' && location) {
-				responseText += `📍 **Location:** ${location}\n`;
-			} else if (appointmentType === 'online' && meetingLink) {
+			if (appointmentType === 'online' && meetingLink) {
 				responseText += `💻 **Meeting Link:** ${meetingLink}\n`;
-			} else if (appointmentType === 'hybrid') {
-				if (location) responseText += `📍 **Primary Location:** ${location}\n`;
-				if (meetingLink) responseText += `💻 **Backup Link:** ${meetingLink}\n`;
 			}
 			
 			if (description) {
@@ -732,7 +691,7 @@ export function registerAppointmentTools(server: McpServer) {
 				content: [
 					{
 						type: "text",
-						text: `❌ **Failed to schedule appointment**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}\n\n💡 Please check:\n- User information (name, email, phone)\n- Appointment type and required details\n- Date and time format\n- Meeting link for online appointments\n- Location for offline appointments`,
+						text: `❌ **Failed to schedule appointment**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}\n\n💡 Please check:\n- User information (name, email, phone)\n- Appointment type (online/offline)\n- Meeting link for online appointments\n- Date and time format\n- Start time (appointments are automatically 45 minutes long)`,
 					},
 				],
 			};
