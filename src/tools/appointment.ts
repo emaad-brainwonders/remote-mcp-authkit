@@ -524,13 +524,12 @@ server.tool(
       const appointmentMinutes = 45;
       const bufferMinutes = 15;
 
+      // Create proper date objects with timezone
       const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
       const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
-      const bufferEndDateObj = new Date(startDateObj.getTime() + (appointmentMinutes + bufferMinutes) * 60 * 1000);
 
       const startDateTime = startDateObj.toISOString().slice(0, 19);
       const endDateTime = endDateObj.toISOString().slice(0, 19);
-      const bufferEndTime = bufferEndDateObj.toISOString().slice(0, 19);
 
       const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
@@ -543,6 +542,7 @@ server.tool(
         timeZone: 'Asia/Kolkata'
       });
 
+      // Check availability with proper overlap detection
       if (checkAvailability) {
         const dayStartTime = `${parsedDate}T00:00:00+05:30`;
         const dayEndTime = `${parsedDate}T23:59:59+05:30`;
@@ -554,12 +554,13 @@ server.tool(
         const checkResult = await makeCalendarApiRequest(checkUrl);
         const existingEvents = checkResult.items || [];
 
-        if (!isTimeSlotAvailable(existingEvents, startDateTime, bufferEndTime)) {
+        // Check if the time slot is available (45 min meeting + 15 min buffer = 60 min total)
+        if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime)) {
           return {
             content: [
               {
                 type: "text",
-                text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment or doesn't allow for a 15-minute buffer.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots.`,
+                text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment or doesn't allow for a 15-minute buffer after the meeting.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots.`,
               },
             ],
           };
@@ -676,6 +677,41 @@ server.tool(
     }
   }
 );
+
+// Corrected isTimeSlotAvailable function
+function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string): boolean {
+  const bufferMinutes = 15; // 15 minute buffer after the meeting
+  
+  const startTime = new Date(meetingStart + '+05:30').getTime();
+  const endTime = new Date(meetingEnd + '+05:30').getTime();
+  
+  // Add 15-minute buffer AFTER the meeting end time
+  const endTimeWithBuffer = endTime + (bufferMinutes * 60 * 1000);
+  
+  for (const event of events) {
+    // Skip all-day events
+    if (!event.start?.dateTime || !event.end?.dateTime) {
+      continue;
+    }
+    
+    const eventStart = new Date(event.start.dateTime).getTime();
+    const eventEnd = new Date(event.end.dateTime).getTime();
+    
+    // Check for overlap: our meeting (with buffer) overlaps with existing event
+    // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
+    const hasOverlap = startTime < eventEnd && endTimeWithBuffer > eventStart;
+    
+    if (hasOverlap) {
+      console.log(`Overlap detected with event: ${event.summary}`);
+      console.log(`Existing: ${new Date(eventStart).toLocaleString()} - ${new Date(eventEnd).toLocaleString()}`);
+      console.log(`Requested: ${new Date(startTime).toLocaleString()} - ${new Date(endTime).toLocaleString()}`);
+      console.log(`With Buffer: ${new Date(startTime).toLocaleString()} - ${new Date(endTimeWithBuffer).toLocaleString()}`);
+      return false;
+    }
+  }
+  
+  return true;
+}
 // Cancel Appointment Tool
 server.tool(
 	"cancelAppointment",
@@ -1049,7 +1085,7 @@ server.tool(
 			}
 
 			// Step 3: Filter events based on search criteria
-			const matchingEvents = events.filter((event) => {
+			const matchingEvents = events.filter((event: any) => {
 				// Skip cancelled or deleted events
 				if (event.status === 'cancelled') return false;
 				
@@ -1077,7 +1113,7 @@ server.tool(
 				
 				if (userEmail) {
 					// Check attendees
-					if (event.attendees && event.attendees.some(attendee => 
+					if (event.attendees && event.attendees.some((attendee: any) => 
 						attendee.email && attendee.email.toLowerCase() === userEmail.toLowerCase()
 					)) {
 						matches = true;
@@ -1121,7 +1157,7 @@ server.tool(
 			}
 
 			if (matchingEvents.length > 1) {
-				const appointmentList = matchingEvents.slice(0, 5).map((event, index) => {
+				const appointmentList = matchingEvents.slice(0, 5).map((event: any, index: number) => {
 					const start = event.start?.dateTime || event.start?.date;
 					const eventDate = start ? new Date(start).toLocaleDateString('en-IN', {
 						timeZone: 'Asia/Kolkata',
@@ -1217,7 +1253,7 @@ server.tool(
 			// Get email from attendees if not found in description
 			if (!extractedUserEmail && originalEvent.attendees && originalEvent.attendees.length > 0) {
 				// Find the first attendee that's not the organizer
-				const userAttendee = originalEvent.attendees.find(attendee => 
+				const userAttendee = originalEvent.attendees.find((attendee: any) => 
 					attendee.email && 
 					attendee.email !== originalEvent.organizer?.email &&
 					!attendee.email.includes('calendar.google.com')
@@ -1252,7 +1288,7 @@ server.tool(
 					`orderBy=startTime`;
 				
 				const checkResult = await makeCalendarApiRequest(checkUrl);
-				const existingEvents = (checkResult.items || []).filter((event) => 
+				const existingEvents = (checkResult.items || []).filter((event: any) => 
 					event.id !== originalEvent.id && event.status !== 'cancelled'
 				);
 				
@@ -1260,7 +1296,7 @@ server.tool(
 				const newStart = newStartDateObj.getTime();
 				const newEnd = newEndDateObj.getTime();
 				
-				const hasConflict = existingEvents.some((event) => {
+				const hasConflict = existingEvents.some((event: any) => {
 					const eventStart = event.start?.dateTime || event.start?.date;
 					if (!eventStart) return false;
 					
@@ -1348,8 +1384,8 @@ server.tool(
 
 			// Get original attendees (excluding the user email to avoid duplicates)
 			const originalAttendees = (originalEvent.attendees || [])
-				.map(attendee => attendee.email)
-				.filter(email => email && email.toLowerCase() !== finalUserEmail.toLowerCase());
+				.map((attendee: any) => attendee.email)
+				.filter((email: string) => email && email.toLowerCase() !== finalUserEmail.toLowerCase());
 
 			const newEvent = {
 				summary: `${finalSummary} - ${finalUserName}`,
@@ -1362,7 +1398,7 @@ server.tool(
 					dateTime: newEndDateObj.toISOString().slice(0, 19), 
 					timeZone: "Asia/Kolkata" 
 				},
-				attendees: [finalUserEmail, ...originalAttendees].map(email => ({ email })),
+				attendees: [finalUserEmail, ...originalAttendees].map((email: string) => ({ email })),
 				reminders: sendReminder ? {
 					useDefault: false,
 					overrides: [
@@ -1385,7 +1421,7 @@ server.tool(
 			try {
 				const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`;
 				await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
-			} catch (cancelError) {
+			} catch (cancelError: unknown) {
 				// If cancellation fails, try to delete the new appointment to maintain consistency
 				try {
 					const deleteNewUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${createResult.id}`;
@@ -1394,7 +1430,8 @@ server.tool(
 					// Ignore deletion error
 				}
 				
-				throw new Error(`Failed to cancel original appointment: ${cancelError.message}`);
+				const errorMsg = cancelError instanceof Error ? cancelError.message : 'Unknown error';
+				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
 
 			// Step 10: Build success response
