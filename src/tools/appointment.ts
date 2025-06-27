@@ -527,16 +527,8 @@ export function registerAppointmentTools(server: McpServer) {
 			}
 			
 			// Validate appointment type specific requirements
-			if (appointmentType === 'online' && !meetingLink) {
+			if (appointmentType === 'online' && (!meetingLink || meetingLink.trim() === "")) {
 				throw new Error("Online appointments require a meeting link");
-			}
-			
-			// Validate meeting link format for online appointments
-			if (appointmentType === 'online' && meetingLink) {
-				const urlPattern = /^https?:\/\/.+/;
-				if (!urlPattern.test(meetingLink)) {
-					throw new Error("Meeting link must be a valid URL starting with http:// or https://");
-				}
 			}
 			
 			// Validate phone number format (basic validation)
