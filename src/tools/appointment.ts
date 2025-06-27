@@ -360,7 +360,8 @@ export function registerAppointmentTools(server: McpServer) {
 			
 			const fullDescription = fullDescriptionParts.join('\n');
 			
-			const event = {
+			// Create base event object
+			const event: any = {
 				summary,
 				description: fullDescription,
 				location: appointmentLocation,
@@ -381,14 +382,16 @@ export function registerAppointmentTools(server: McpServer) {
 				};
 			}
 			
+			// Build API URL with conference data parameter if needed
+			const apiUrl = "https://www.googleapis.com/calendar/v3/calendars/primary/events" + 
+				(appointmentType === "online" && !location ? "?conferenceDataVersion=1" : "");
+			
 			const result = await makeCalendarApiRequest(
-				"https://www.googleapis.com/calendar/v3/calendars/primary/events",
+				apiUrl,
 				{
 					method: "POST",
 					body: JSON.stringify(event),
-				},
-				// Add conferenceDataVersion parameter for Google Meet integration
-				appointmentType === "online" && !location ? "?conferenceDataVersion=1" : ""
+				}
 			);
 			
 			// Determine appointment type emoji and details
@@ -405,7 +408,7 @@ export function registerAppointmentTools(server: McpServer) {
 			
 			// Add Google Meet link if available
 			if (result.conferenceData && result.conferenceData.entryPoints) {
-				const meetLink = result.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
+				const meetLink = result.conferenceData.entryPoints.find((ep: any) => ep.entryPointType === 'video');
 				if (meetLink) {
 					responseText += `🔗 **Meeting Link:** ${meetLink.uri}\n`;
 				}
