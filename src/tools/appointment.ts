@@ -1,5 +1,5 @@
-
 import { z } from "zod";
+import { sendAppointmentEmail } from "./mail"; // Import the email function
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { sendAppointmentEmail } from'./mail';
 
@@ -613,18 +613,22 @@ export function registerAppointmentTools(server: McpServer) {
         }
       );
 
-      await sendAppointmentEmail({
-        to: userEmail,
-        emailType: 'created',
-        appointmentDetails: {
-          summary: `${summary} - ${userName}`,
-          date: displayDate,
-          time: displayStartTime,
-          userName: userName
-        }
-      });
-
-
+      // Send appointment confirmation email
+      try {
+        await sendAppointmentEmail({
+          to: userEmail,
+          emailType: 'created',
+          appointmentDetails: {
+            summary: `${summary} - ${userName}`,
+            date: displayDate,
+            time: displayStartTime,
+            userName: userName
+          }
+        });
+      } catch (emailError) {
+        console.error('Failed to send appointment email:', emailError);
+        // Continue with the response even if email fails
+      }
 
       let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
       responseText += `👤 **Client:** ${userName}\n`;
@@ -652,6 +656,7 @@ export function registerAppointmentTools(server: McpServer) {
       }
 
       responseText += `\n\n🎉 All set! Your appointment has been added to your calendar and all attendees have been invited.`;
+      responseText += `\n📧 **Confirmation email sent to:** ${userEmail}`;
 
       if (requireConfirmation) {
         responseText += `\n\n⚠️ **Confirmation Required:** Please confirm your attendance by replying to the calendar invitation.`;
@@ -677,10 +682,6 @@ export function registerAppointmentTools(server: McpServer) {
     }
   }
 );
-
-
-
-// ... (existing imports, helpers, and other tools above)
 
 // Cancel Appointment Tool (supports user info, NO confirmation step)
 // Enhanced Cancel Appointment Tool
@@ -857,6 +858,9 @@ server.tool(
 
 			// Extract user information from the event for confirmation
 			let userInfo = '';
+			let clientEmail = '';
+			let clientName = '';
+			
 			if (eventToCancel.description) {
 				const nameMatch = eventToCancel.description.match(/Name: ([^\n]+)/);
 				const emailMatch = eventToCancel.description.match(/Email: ([^\n]+)/);
@@ -864,8 +868,14 @@ server.tool(
 				
 				if (nameMatch || emailMatch || phoneMatch) {
 					userInfo = '\n👤 **Client Details:**\n';
-					if (nameMatch) userInfo += `Name: ${nameMatch[1]}\n`;
-					if (emailMatch) userInfo += `Email: ${emailMatch[1]}\n`;
+					if (nameMatch) {
+						userInfo += `Name: ${nameMatch[1]}\n`;
+						clientName = nameMatch[1];
+					}
+					if (emailMatch) {
+						userInfo += `Email: ${emailMatch[1]}\n`;
+						clientEmail = emailMatch[1];
+					}
 					if (phoneMatch) userInfo += `Phone: ${phoneMatch[1]}\n`;
 				}
 			}
@@ -874,10 +884,35 @@ server.tool(
 			const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToCancel.id}`;
 			await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
 
+			// Send cancellation email if we have the client's email
+			if (clientEmail) {
+				try {
+					await sendAppointmentEmail({
+						to: clientEmail,
+						emailType: 'cancelled',
+						appointmentDetails: {
+							summary: eventToCancel.summary,
+							date: eventDate,
+							time: timeString,
+							userName: clientName
+						}
+					});
+				} catch (emailError) {
+					console.error('Failed to send cancellation email:', emailError);
+					// Continue with the response even if email fails
+				}
+			}
+
+			let responseText = `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${eventDate}\n⏰ **Time:** ${timeString}${userInfo}\n\n🗑️ The appointment has been permanently removed from your calendar and all attendees have been notified.`;
+			
+			if (clientEmail) {
+				responseText += `\n📧 **Cancellation email sent to:** ${clientEmail}`;
+			}
+
 			return {
 				content: [{
 					type: "text",
-					text: `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${eventDate}\n⏰ **Time:** ${timeString}${userInfo}\n\n🗑️ The appointment has been permanently removed from your calendar and all attendees have been notified.`
+					text: responseText
 				}]
 			};
 
