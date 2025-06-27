@@ -1,3 +1,4 @@
+// mail.ts
 import { z } from "zod";
 
 // Email configuration
@@ -87,6 +88,71 @@ async function sendGmailEmail(to: string, subject: string, body: string): Promis
 	return response.json();
 }
 
+// Export the sendAppointmentEmail function for use in other modules
+export async function sendAppointmentEmail({ to, emailType, appointmentDetails, customMessage }: SendAppointmentEmailParams) {
+	let template;
+	let subject;
+	let body;
+
+	switch (emailType) {
+		case 'created':
+			template = EMAIL_TEMPLATES.appointmentCreated;
+			subject = template.subject;
+			body = `Hi ${appointmentDetails.userName || 'there'},
+
+${template.body}
+
+Appointment Details:
+• ${appointmentDetails.summary}
+• ${appointmentDetails.date} at ${appointmentDetails.time}
+
+${customMessage || ''}
+
+Best regards,
+Sales Team`;
+			break;
+
+		case 'cancelled':
+			template = EMAIL_TEMPLATES.appointmentCancelled;
+			subject = template.subject;
+			body = `Hi ${appointmentDetails.userName || 'there'},
+
+${template.body}
+
+Cancelled Appointment:
+• ${appointmentDetails.summary}
+• Originally: ${appointmentDetails.date} at ${appointmentDetails.time}
+
+${customMessage || ''}
+
+Best regards,
+Support Team`;
+			break;
+
+		case 'rescheduled':
+			template = EMAIL_TEMPLATES.appointmentRescheduled;
+			subject = template.subject;
+			body = `Hi ${appointmentDetails.userName || 'there'},
+
+${template.body}
+
+Updated Appointment:
+• ${appointmentDetails.summary}
+• New Date: ${appointmentDetails.date} at ${appointmentDetails.time}
+
+${customMessage || ''}
+
+Best regards,
+Support Team`;
+			break;
+
+		default:
+			throw new Error(`Unknown email type: ${emailType}`);
+	}
+
+	return await sendGmailEmail(to, subject, body);
+}
+
 // MCP Server tools
 export function registerEmailTools(server: any) {
 	// Send immediate appointment notification
@@ -106,67 +172,7 @@ export function registerEmailTools(server: any) {
 		},
 		async ({ to, emailType, appointmentDetails, customMessage }: SendAppointmentEmailParams) => {
 			try {
-				let template;
-				let subject;
-				let body;
-
-				switch (emailType) {
-					case 'created':
-						template = EMAIL_TEMPLATES.appointmentCreated;
-						subject = template.subject;
-						body = `Hi ${appointmentDetails.userName || 'there'},
-
-${template.body}
-
-Appointment Details:
-• ${appointmentDetails.summary}
-• ${appointmentDetails.date} at ${appointmentDetails.time}
-
-${customMessage || ''}
-
-Best regards,
-Sales Team`;
-						break;
-
-					case 'cancelled':
-						template = EMAIL_TEMPLATES.appointmentCancelled;
-						subject = template.subject;
-						body = `Hi ${appointmentDetails.userName || 'there'},
-
-${template.body}
-
-Cancelled Appointment:
-• ${appointmentDetails.summary}
-• Originally: ${appointmentDetails.date} at ${appointmentDetails.time}
-
-${customMessage || ''}
-
-Best regards,
-Support Team`;
-						break;
-
-					case 'rescheduled':
-						template = EMAIL_TEMPLATES.appointmentRescheduled;
-						subject = template.subject;
-						body = `Hi ${appointmentDetails.userName || 'there'},
-
-${template.body}
-
-Updated Appointment:
-• ${appointmentDetails.summary}
-• New Date: ${appointmentDetails.date} at ${appointmentDetails.time}
-
-${customMessage || ''}
-
-Best regards,
-Support Team`;
-						break;
-
-					default:
-						throw new Error(`Unknown email type: ${emailType}`);
-				}
-
-				const result = await sendGmailEmail(to, subject, body);
+				const result = await sendAppointmentEmail({ to, emailType, appointmentDetails, customMessage });
 
 				return {
 					content: [{
