@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { sendAppointmentEmail } from "./mail"; // Import the email function
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { sendAppointmentEmail } from'./mail';
+
 
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
