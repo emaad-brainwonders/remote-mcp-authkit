@@ -620,6 +620,27 @@ export function registerAppointmentTools(server: McpServer) {
 						body: JSON.stringify(event),
 					}
 				);
+				// In your main appointment script, after creating an appointment:
+await sendAppointmentEmail({
+  to: userEmail,
+  emailType: 'created',
+  appointmentDetails: {
+    summary: appointmentTitle,
+    date: formattedDate,
+    time: formattedTime,
+    userName: userName
+  }
+});
+
+// Schedule reminders
+await scheduleAppointmentReminders({
+  to: userEmail,
+  appointmentDetails: {
+    summary: appointmentTitle,
+    dateTime: appointmentDateTime,
+    userName: userName
+  }
+});
 
 				let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
 				responseText += `👤 **Client:** ${userName}\n`;
