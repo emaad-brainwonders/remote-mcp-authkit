@@ -144,25 +144,18 @@ function validateTimeFormat(time: string): boolean {
 }
 
 // Helper: Check if a time slot is available
-function isTimeSlotAvailable(events: any[], startTime: string, endTime: string): boolean {
-	const requestStart = new Date(startTime);
-	const requestEnd = new Date(endTime);
-	
-	if (isNaN(requestStart.getTime()) || isNaN(requestEnd.getTime())) {
-		return false;
-	}
-	
-	return !events.some(event => {
-		if (!event.start?.dateTime || !event.end?.dateTime) return false;
-		
-		const eventStart = new Date(event.start.dateTime);
-		const eventEnd = new Date(event.end.dateTime);
-		
-		if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) return false;
-		
-		// Check for overlap
-		return (requestStart < eventEnd && requestEnd > eventStart);
-	});
+function isTimeSlotAvailable(events: any[], proposedStart: string, proposedEnd: string): boolean {
+  const proposedStartTime = new Date(proposedStart).getTime();
+  const proposedEndTime = new Date(proposedEnd).getTime();
+
+  for (const event of events) {
+    const eventStart = new Date(event.start?.dateTime || event.start?.date).getTime();
+    const eventEnd = new Date(event.end?.dateTime || event.end?.date).getTime();
+
+    const isOverlap = proposedStartTime < eventEnd && proposedEndTime > eventStart;
+    if (isOverlap) return false;
+  }
+  return true;
 }
 
 // Helper: Parse attendees from various input formats
@@ -344,142 +337,137 @@ export function registerAppointmentTools(server: McpServer) {
 	
 	// Recommend available appointment times
 	server.tool(
-		"recommendAppointmentTimes",
-		"Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
-		{
-			date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', 'next week', etc."),
-			duration: z.number().min(0.25).max(8).default(0.5).describe("Duration in hours (default: 0.5 hours = 30 minutes, min: 0.25, max: 8)"),
-		},
-		async ({ date, duration = 0.5 }) => {
-			try {
-				// Parse the date input to handle relative expressions
-				const parsedDate = parseRelativeDate(date);
-				const displayDate = formatDateForDisplay(parsedDate);
-				
-				// Get existing events for the day
-				const startDateTime = `${parsedDate}T00:00:00+05:30`;
-				const endDateTime = `${parsedDate}T23:59:59+05:30`;
-				
-				const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-					`timeMin=${encodeURIComponent(startDateTime)}&` +
-					`timeMax=${encodeURIComponent(endDateTime)}&` +
-					`singleEvents=true&` +
-					`orderBy=startTime`;
-				
-				const result = await makeCalendarApiRequest(url);
-				const events = result.items || [];
-				
-				// Generate recommendations based on duration
-				const recommendations: string[] = [];
-				const workingHours = [
-					{ start: 9, end: 12, period: 'Morning' }, 
-					{ start: 14, end: 17, period: 'Afternoon' }  
-				];
-				
-				// Convert duration to minutes for more precise slot generation
-				const durationMinutes = duration * 60;
-				const slotIntervalMinutes = 30; // Generate slots every 30 minutes
-				
-				let morningSlots: string[] = [];
-				let afternoonSlots: string[] = [];
-				
-				for (const period of workingHours) {
-					const startMinutes = period.start * 60;
-					const endMinutes = period.end * 60;
-					
-					// Generate slots at 30-minute intervals
-					for (let currentMinutes = startMinutes; currentMinutes <= endMinutes - durationMinutes; currentMinutes += slotIntervalMinutes) {
-						const startHour = Math.floor(currentMinutes / 60);
-						const startMinute = currentMinutes % 60;
-						const endTotalMinutes = currentMinutes + durationMinutes;
-						const endHour = Math.floor(endTotalMinutes / 60);
-						const endMinuteValue = endTotalMinutes % 60;
-						
-						const startTime = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
-						const endTime = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinuteValue.toString().padStart(2, '0')}:00`;
-						
-						if (isTimeSlotAvailable(events, startTime, endTime)) {
-							const startFormatted = new Date(startTime).toLocaleTimeString('en-IN', { 
-								hour: '2-digit', 
-								minute: '2-digit',
-								timeZone: 'Asia/Kolkata'
-							});
-							const endFormatted = new Date(endTime).toLocaleTimeString('en-IN', { 
-								hour: '2-digit', 
-								minute: '2-digit',
-								timeZone: 'Asia/Kolkata'
-							});
-							
-							const timeSlot = `${startFormatted} - ${endFormatted}`;
-							
-							if (period.period === 'Morning') {
-								morningSlots.push(timeSlot);
-							} else {
-								afternoonSlots.push(timeSlot);
-							}
-						}
-					}
-				}
-				
-				const durationText = duration === 1 ? '1 hour' : 
-								   duration === 0.5 ? '30 minutes' : 
-								   duration < 1 ? `${duration * 60} minutes` : 
-								   `${duration} hours`;
-				
-				if (morningSlots.length === 0 && afternoonSlots.length === 0) {
-					return {
-						content: [
-							{
-								type: "text",
-								text: `😔 **No availability found**\n\nI couldn't find any ${durationText} slots available on ${displayDate} during standard working hours (9 AM - 12 PM, 2 PM - 5 PM).\n\nYour day might be fully booked, or you might want to try a different date.`,
-							},
-						],
-					};
-				}
-				
-				let responseText = `⏰ **Available ${durationText} slots for ${displayDate}**\n\n`;
-				
-				if (morningSlots.length > 0) {
-					responseText += `🌅 **Morning Options:**\n`;
-					morningSlots.forEach((slot, index) => {
-						responseText += `${index + 1}. ${slot}\n`;
-					});
-					responseText += '\n';
-				}
-				
-				if (afternoonSlots.length > 0) {
-					responseText += `🌤️ **Afternoon Options:**\n`;
-					afternoonSlots.forEach((slot, index) => {
-						responseText += `${index + 1}. ${slot}\n`;
-					});
-				}
-				
-				const totalSlots = morningSlots.length + afternoonSlots.length;
-				responseText += `\n✨ Found ${totalSlots} available time ${totalSlots === 1 ? 'slot' : 'slots'} for you to choose from!`;
-				
-				return {
-					content: [
-						{
-							type: "text",
-							text: responseText.trim(),
-						},
-					],
-				};
-			} catch (error) {
-				return {
-					content: [
-						{
-							type: "text",
-							text: `❌ I couldn't check your availability. ${error instanceof Error ? error.message : 'Please try again later.'}`,
-						},
-					],
-				};
-			}
-		}
-	);
+  "recommendAppointmentTimes",
+  "Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
+  {
+    date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', 'next week', etc."),
+  },
+  async ({ date }) => {
+    try {
+      const parsedDate = parseRelativeDate(date);
+      const displayDate = formatDateForDisplay(parsedDate);
+
+      const startDateTime = `${parsedDate}T00:00:00+05:30`;
+      const endDateTime = `${parsedDate}T23:59:59+05:30`;
+
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${encodeURIComponent(startDateTime)}&` +
+        `timeMax=${encodeURIComponent(endDateTime)}&` +
+        `singleEvents=true&` +
+        `orderBy=startTime`;
+
+      const result = await makeCalendarApiRequest(url);
+      const events = result.items || [];
+
+      const recommendations: string[] = [];
+      const workingHours = [
+        { start: 9, end: 12, period: 'Morning' },
+        { start: 14, end: 17, period: 'Afternoon' }
+      ];
+
+      const appointmentMinutes = 45;
+      const bufferMinutes = 15;
+      const totalBlockMinutes = appointmentMinutes + bufferMinutes;
+      const slotIntervalMinutes = 30;
+
+      let morningSlots: string[] = [];
+      let afternoonSlots: string[] = [];
+
+      for (const period of workingHours) {
+        const startMinutes = period.start * 60;
+        const endMinutes = period.end * 60;
+
+        for (
+          let currentMinutes = startMinutes;
+          currentMinutes <= endMinutes - totalBlockMinutes;
+          currentMinutes += slotIntervalMinutes
+        ) {
+          const startHour = Math.floor(currentMinutes / 60);
+          const startMinute = currentMinutes % 60;
+          const endTotalMinutes = currentMinutes + totalBlockMinutes;
+          const endHour = Math.floor(endTotalMinutes / 60);
+          const endMinute = endTotalMinutes % 60;
+
+          const startTime = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+          const endTime = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
+
+          if (isTimeSlotAvailable(events, startTime, endTime)) {
+            const startFormatted = new Date(startTime).toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'Asia/Kolkata'
+            });
+            const endFormatted = new Date(new Date(startTime).getTime() + appointmentMinutes * 60 * 1000)
+              .toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Asia/Kolkata'
+              });
+
+            const timeSlot = `${startFormatted} - ${endFormatted}`;
+            if (period.period === 'Morning') {
+              morningSlots.push(timeSlot);
+            } else {
+              afternoonSlots.push(timeSlot);
+            }
+          }
+        }
+      }
+
+      if (morningSlots.length === 0 && afternoonSlots.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `😔 **No availability found**\n\nI couldn't find any 45-minute slots (with 15-minute buffers) available on ${displayDate} during working hours (9 AM – 12 PM, 2 PM – 5 PM).\n\nTry a different date or check your calendar.`,
+            },
+          ],
+        };
+      }
+
+      let responseText = `⏰ **Available 45-minute slots for ${displayDate}**\n\n`;
+
+      if (morningSlots.length > 0) {
+        responseText += `🌅 **Morning Options:**\n`;
+        morningSlots.forEach((slot, index) => {
+          responseText += `${index + 1}. ${slot}\n`;
+        });
+        responseText += '\n';
+      }
+
+      if (afternoonSlots.length > 0) {
+        responseText += `🌤️ **Afternoon Options:**\n`;
+        afternoonSlots.forEach((slot, index) => {
+          responseText += `${index + 1}. ${slot}\n`;
+        });
+      }
+
+      const totalSlots = morningSlots.length + afternoonSlots.length;
+      responseText += `\n✨ Found ${totalSlots} available time ${totalSlots === 1 ? 'slot' : 'slots'} for you to choose from!`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: responseText.trim(),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ I couldn't check your availability. ${error instanceof Error ? error.message : 'Please try again later.'}`,
+          },
+        ],
+      };
+    }
+  }
+);
 	
 	// Schedule appointment tool
-	server.tool(
+server.tool(
   "scheduleAppointment",
   "Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone) with comprehensive user information and appointment format. Supports relative dates like 'today', 'tomorrow', '10 days from now', etc.",
   {
@@ -532,11 +520,16 @@ export function registerAppointmentTools(server: McpServer) {
         arr.indexOf(email) === index
       );
 
-      const startDateObj = new Date(`${parsedDate}T${startTime}:00`);
-      const endDateObj = new Date(startDateObj.getTime() + 45 * 60 * 1000);
+      const appointmentMinutes = 45;
+      const bufferMinutes = 15;
 
-      const startDateTime = `${parsedDate}T${startTime}:00`;
+      const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
+      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
+      const bufferEndDateObj = new Date(startDateObj.getTime() + (appointmentMinutes + bufferMinutes) * 60 * 1000);
+
+      const startDateTime = startDateObj.toISOString().slice(0, 19);
       const endDateTime = endDateObj.toISOString().slice(0, 19);
+      const bufferEndTime = bufferEndDateObj.toISOString().slice(0, 19);
 
       const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
@@ -559,12 +552,13 @@ export function registerAppointmentTools(server: McpServer) {
           `orderBy=startTime`;
         const checkResult = await makeCalendarApiRequest(checkUrl);
         const existingEvents = checkResult.items || [];
-        if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime)) {
+
+        if (!isTimeSlotAvailable(existingEvents, startDateTime, bufferEndTime)) {
           return {
             content: [
               {
                 type: "text",
-                text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots that work for you.`,
+                text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment or doesn't allow for a 15-minute buffer.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots.`,
               },
             ],
           };
@@ -627,7 +621,6 @@ export function registerAppointmentTools(server: McpServer) {
         });
       } catch (emailError) {
         console.error('Failed to send appointment email:', emailError);
-        // Continue with the response even if email fails
       }
 
       let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
@@ -652,7 +645,7 @@ export function registerAppointmentTools(server: McpServer) {
       }
 
       if (sendReminder) {
-        responseText += `\n\n📨 **Reminders:** Email reminder will be sent 1 day before, popup reminder 30 minutes before`;
+        responseText += `\n\n📨 **Reminders:** Email reminder 1 day before, popup 30 minutes before`;
       }
 
       responseText += `\n\n🎉 All set! Your appointment has been added to your calendar and all attendees have been invited.`;
