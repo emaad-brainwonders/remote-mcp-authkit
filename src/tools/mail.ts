@@ -1,9 +1,10 @@
 // mail.ts
 import { z } from "zod";
+import { getGoogleAccessToken } from "../env"; // Import env helper
 
 // Email configuration
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
-const ACCESS_TOKEN = env.GOOGLE_ACCESS_TOKEN;
+const ACCESS_TOKEN = getGoogleAccessToken();
 // Simple email template
 const EMAIL_TEMPLATE = {
   subject: "Appointment Scheduled",
