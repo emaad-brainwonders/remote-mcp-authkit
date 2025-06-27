@@ -371,7 +371,6 @@ export function registerAppointmentTools(server: McpServer) {
       const appointmentMinutes = 45;
       const bufferMinutes = 15;
       const totalBlockMinutes = appointmentMinutes + bufferMinutes;
-      const slotIntervalMinutes = 30;
 
       let morningSlots: string[] = [];
       let afternoonSlots: string[] = [];
@@ -383,35 +382,34 @@ export function registerAppointmentTools(server: McpServer) {
         for (
           let currentMinutes = startMinutes;
           currentMinutes <= endMinutes - totalBlockMinutes;
-          currentMinutes += slotIntervalMinutes
+          currentMinutes += totalBlockMinutes // Skip to next valid slot respecting buffer
         ) {
           const startHour = Math.floor(currentMinutes / 60);
           const startMinute = currentMinutes % 60;
-          const endTotalMinutes = currentMinutes + totalBlockMinutes;
+          const endTotalMinutes = currentMinutes + appointmentMinutes;
           const endHour = Math.floor(endTotalMinutes / 60);
           const endMinute = endTotalMinutes % 60;
 
-          const startTime = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
-          const endTime = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
+          const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+          const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
 
-          if (isTimeSlotAvailable(events, startTime, endTime)) {
-            const startFormatted = new Date(startTime).toLocaleTimeString('en-IN', {
+          if (isTimeSlotAvailable(events, slotStart, slotEnd, bufferMinutes)) {
+            const startFormatted = new Date(slotStart).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
             });
-            const endFormatted = new Date(new Date(startTime).getTime() + appointmentMinutes * 60 * 1000)
-              .toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                timeZone: 'Asia/Kolkata'
-              });
+            const endFormatted = new Date(slotEnd).toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'Asia/Kolkata'
+            });
 
-            const timeSlot = `${startFormatted} - ${endFormatted}`;
+            const slotText = `${startFormatted} - ${endFormatted}`;
             if (period.period === 'Morning') {
-              morningSlots.push(timeSlot);
+              morningSlots.push(slotText);
             } else {
-              afternoonSlots.push(timeSlot);
+              afternoonSlots.push(slotText);
             }
           }
         }
@@ -472,7 +470,7 @@ export function registerAppointmentTools(server: McpServer) {
 	// Schedule appointment tool
 server.tool(
   "scheduleAppointment",
-  "Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone) with comprehensive user information and appointment format. Supports relative dates like 'today', 'tomorrow', '10 days from now', etc.",
+  "Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone) with a 15-minute buffer after a 45-minute meeting.",
   {
     userName: z.string().min(1).describe("Full name of the person booking the appointment"),
     userEmail: z.string().email().describe("Email address of the person booking the appointment"),
@@ -480,7 +478,7 @@ server.tool(
     summary: z.string().min(1).describe("Appointment title/summary"),
     description: z.string().optional().describe("Appointment description (optional)"),
     appointmentType: z.enum(['online', 'offline']).describe("Type of appointment: 'online' for virtual meetings, 'offline' for in-person meetings"),
-    date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
+    date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', etc."),
     startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("Start time in HH:MM format (24-hour)"),
     attendees: z.union([
       z.array(z.string().email()),
@@ -490,109 +488,62 @@ server.tool(
     sendReminder: z.coerce.boolean().default(true).describe("Send email reminder to the user"),
     requireConfirmation: z.coerce.boolean().default(false).describe("Require confirmation from the user before finalizing"),
   },
-  async ({
-    userName,
-    userEmail,
-    userPhone,
-    summary,
-    description,
-    appointmentType,
-    date,
-    startTime,
-    attendees = [],
-    checkAvailability = true,
-    sendReminder = true,
-    requireConfirmation = false,
-  }) => {
+  async (args) => {
     try {
-      const today = getCurrentDate();
+      const {
+        userName,
+        userEmail,
+        userPhone,
+        summary,
+        description,
+        appointmentType,
+        date,
+        startTime,
+        attendees = [],
+        checkAvailability = true,
+        sendReminder = true,
+        requireConfirmation = false,
+      } = args;
+
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
-
-      if (!validateTimeFormat(startTime)) {
-        throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
-      }
-
-      const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
-      if (!phoneRegex.test(userPhone.replace(/[\s\-\(\)]/g, ''))) {
-        throw new Error("Invalid phone number format. Please include country code for international numbers");
-      }
-
-      const parsedAttendees = parseAttendeesInput(attendees);
-      const allAttendees = [userEmail, ...parsedAttendees].filter((email, index, arr) =>
-        arr.indexOf(email) === index
-      );
-
       const appointmentMinutes = 45;
       const bufferMinutes = 15;
 
       const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
-      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
-      const bufferEndDateObj = new Date(startDateObj.getTime() + (appointmentMinutes + bufferMinutes) * 60 * 1000);
+      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60000);
+      const bufferEndDateObj = new Date(startDateObj.getTime() + (appointmentMinutes + bufferMinutes) * 60000);
 
       const startDateTime = startDateObj.toISOString().slice(0, 19);
       const endDateTime = endDateObj.toISOString().slice(0, 19);
       const bufferEndTime = bufferEndDateObj.toISOString().slice(0, 19);
 
-      const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Kolkata'
-      });
-      const displayEndTime = endDateObj.toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Kolkata'
-      });
-
       if (checkAvailability) {
-        const dayStartTime = `${parsedDate}T00:00:00+05:30`;
-        const dayEndTime = `${parsedDate}T23:59:59+05:30`;
         const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-          `timeMin=${encodeURIComponent(dayStartTime)}&` +
-          `timeMax=${encodeURIComponent(dayEndTime)}&` +
-          `singleEvents=true&` +
-          `orderBy=startTime`;
-        const checkResult = await makeCalendarApiRequest(checkUrl);
-        const existingEvents = checkResult.items || [];
+          `timeMin=${parsedDate}T00:00:00+05:30&` +
+          `timeMax=${parsedDate}T23:59:59+05:30&` +
+          `singleEvents=true&orderBy=startTime`;
+        const result = await makeCalendarApiRequest(checkUrl);
+        const existingEvents = result.items || [];
 
-        if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime, 15)) {
+        if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime, bufferMinutes)) {
           return {
             content: [
               {
                 type: "text",
-                text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment or doesn't allow for a 15-minute buffer.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots.`,
+                text: `❌ Time slot ${startTime} on ${displayDate} is unavailable (requires 15 min buffer). Please choose another.`,
               },
             ],
           };
         }
       }
 
-      const appointmentDetails = [
-        `👤 **Client Information:**`,
-        `Name: ${userName}`,
-        `Email: ${userEmail}`,
-        `Phone: ${userPhone}`,
-        ``,
-        `📋 **Appointment Details:**`,
-        `Type: ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting`,
-        `Duration: 45 minutes`,
-      ];
-
-      if (description) {
-        appointmentDetails.push(``, `📝 **Additional Notes:**`, description);
-      }
-
-      appointmentDetails.push(``, `🕐 **Scheduled on:** ${today}`);
-
-      const fullDescription = appointmentDetails.join('\n');
-
       const event = {
         summary: `${summary} - ${userName}`,
-        description: fullDescription,
+        description: `${userName}\n${userEmail}\n${userPhone}\n\n${appointmentType} Appointment\nDuration: 45 minutes\n\n${description || ''}`,
         start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
         end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-        attendees: allAttendees.map(email => ({ email })),
+        attendees: [userEmail, ...(Array.isArray(attendees) ? attendees : JSON.parse(attendees))].map(email => ({ email })),
         reminders: sendReminder ? {
           useDefault: false,
           overrides: [
@@ -602,67 +553,27 @@ server.tool(
         } : undefined,
       };
 
-      const result = await makeCalendarApiRequest(
+      const calendarRes = await makeCalendarApiRequest(
         "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-        {
-          method: "POST",
-          body: JSON.stringify(event),
-        }
+        { method: "POST", body: JSON.stringify(event) }
       );
 
-      // Send appointment confirmation email
-      try {
-        await sendAppointmentEmail({
-          to: userEmail,
-          emailType: 'created',
-          appointmentDetails: {
-            summary: `${summary} - ${userName}`,
-            date: displayDate,
-            time: displayStartTime,
-            userName: userName
-          }
-        });
-      } catch (emailError) {
-        console.error('Failed to send appointment email:', emailError);
-      }
-
-      let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
-      responseText += `👤 **Client:** ${userName}\n`;
-      responseText += `📧 **Email:** ${userEmail}\n`;
-      responseText += `📱 **Phone:** ${userPhone}\n\n`;
-      responseText += `📋 **Event:** ${summary}\n`;
-      responseText += `📅 **Date:** ${displayDate}\n`;
-      responseText += `⏰ **Time:** ${displayStartTime} - ${displayEndTime} (45 minutes)\n`;
-      responseText += `🔗 **Type:** ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting\n`;
-
-      if (description) {
-        responseText += `📝 **Description:** ${description}\n`;
-      }
-
-      if (parsedAttendees.length > 0) {
-        responseText += `👥 **Additional Attendees:** ${parsedAttendees.join(', ')}\n`;
-      }
-
-      if (result.htmlLink) {
-        responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
-      }
-
-      if (sendReminder) {
-        responseText += `\n\n📨 **Reminders:** Email reminder 1 day before, popup 30 minutes before`;
-      }
-
-      responseText += `\n\n🎉 All set! Your appointment has been added to your calendar and all attendees have been invited.`;
-      responseText += `\n📧 **Confirmation email sent to:** ${userEmail}`;
-
-      if (requireConfirmation) {
-        responseText += `\n\n⚠️ **Confirmation Required:** Please confirm your attendance by replying to the calendar invitation.`;
-      }
+      await sendAppointmentEmail({
+        to: userEmail,
+        emailType: 'created',
+        appointmentDetails: {
+          summary: `${summary} - ${userName}`,
+          date: displayDate,
+          time: startTime,
+          userName,
+        },
+      });
 
       return {
         content: [
           {
             type: "text",
-            text: responseText,
+            text: `✅ Appointment scheduled for ${userName} on ${displayDate} at ${startTime} (45 min + 15 min buffer).`,
           },
         ],
       };
@@ -671,16 +582,14 @@ server.tool(
         content: [
           {
             type: "text",
-            text: `❌ **Failed to schedule appointment**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}\n\n💡 Please check:\n- User information (name, email, phone)\n- Appointment type (online/offline)\n- Date and time format\n- Start time (appointments are automatically 45 minutes long)`,
+            text: `❌ Failed to schedule appointment: ${error instanceof Error ? error.message : 'Unknown error'}`,
           },
         ],
       };
     }
   }
 );
-
-// Cancel Appointment Tool (supports user info, NO confirmation step)
-// Enhanced Cancel Appointment Tool
+// Cancel Appointment Tool
 server.tool(
 	"cancelAppointment",
 	"Cancel an existing appointment from Google Calendar by searching for it by title, date, or user info",
