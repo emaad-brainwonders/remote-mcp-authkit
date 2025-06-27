@@ -3,8 +3,7 @@ import { z } from "zod";
 
 // Email configuration
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
-const ACCESS_TOKEN = "ya29.a0AS3H6NwahUIvEG76O-hEYPHSourmrt3_U51CCt3yv5ErnwjR7--6gcCqH-jP4Mg2JqxGziaUvyhz55QykS5coTAomFhoy46D0jd5KR02fAboaj6sM32N5uwKjf6KZLMy9WdkFSOG0H8jIuWG2rgaYlKUwF0KUXHcrbroLGxS6waCgYKAeYSARQSFQHGX2MiyFomdRMDRA70UvlcZ6QNLQ0177";
-
+const ACCESS_TOKEN = env.GOOGLE_ACCESS_TOKEN;
 // Simple email template
 const EMAIL_TEMPLATE = {
   subject: "Appointment Scheduled",
