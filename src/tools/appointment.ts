@@ -482,7 +482,7 @@ export function registerAppointmentTools(server: McpServer) {
 		appointmentType: z.enum(['online', 'offline']).describe("Type of appointment: 'online' for virtual meetings, 'offline' for in-person meetings"),
 		
 		// Meeting Details for online appointments only
-		meetingLink: z.string().url().optional().describe("Meeting link for online appointments (Zoom, Teams, Meet, etc.)"),
+		meetingLink: z.string().url().optional().describe("Meeting link for online appointments (Zoom, Teams, Meet, etc.)");
 		
 		// Date and Time
 		date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
@@ -529,6 +529,14 @@ export function registerAppointmentTools(server: McpServer) {
 			// Validate appointment type specific requirements
 			if (appointmentType === 'online' && !meetingLink) {
 				throw new Error("Online appointments require a meeting link");
+			}
+			
+			// Validate meeting link format for online appointments
+			if (appointmentType === 'online' && meetingLink) {
+				const urlPattern = /^https?:\/\/.+/;
+				if (!urlPattern.test(meetingLink)) {
+					throw new Error("Meeting link must be a valid URL starting with http:// or https://");
+				}
 			}
 			
 			// Validate phone number format (basic validation)
