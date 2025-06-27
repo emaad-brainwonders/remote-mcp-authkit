@@ -21,9 +21,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
 
   async init() {
     // Set the environment variables globally at initialization
-    if (this.env) {
-      setEnv(this.env);
-    }
+   
     
     // Register tools directly
     registerDateTool(this.server);
