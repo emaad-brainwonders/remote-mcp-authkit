@@ -1,7 +1,7 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { sendAppointmentEmailLogic, scheduleAppointmentRemindersLogic } from './mail';
+import { sendAppointmentEmailLogic,} from './mail';
 
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
@@ -624,14 +624,7 @@ export function registerAppointmentTools(server: McpServer) {
         }
       });
 
-      await scheduleAppointmentReminders({
-        to: userEmail,
-        appointmentDetails: {
-          summary: `${summary} - ${userName}`,
-          dateTime: startDateTime,
-          userName: userName
-        }
-      });
+
 
       let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
       responseText += `👤 **Client:** ${userName}\n`;
