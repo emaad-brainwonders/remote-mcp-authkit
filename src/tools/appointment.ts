@@ -694,42 +694,6 @@ server.tool(
     }
   }
 );
-
-
-// Corrected isTimeSlotAvailable function
-function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string): boolean {
-  const bufferMinutes = 15; // 15 minute buffer after the meeting
-  
-  const startTime = new Date(meetingStart + '+05:30').getTime();
-  const endTime = new Date(meetingEnd + '+05:30').getTime();
-  
-  // Add 15-minute buffer AFTER the meeting end time
-  const endTimeWithBuffer = endTime + (bufferMinutes * 60 * 1000);
-  
-  for (const event of events) {
-    // Skip all-day events
-    if (!event.start?.dateTime || !event.end?.dateTime) {
-      continue;
-    }
-    
-    const eventStart = new Date(event.start.dateTime).getTime();
-    const eventEnd = new Date(event.end.dateTime).getTime();
-    
-    // Check for overlap: our meeting (with buffer) overlaps with existing event
-    // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
-    const hasOverlap = startTime < eventEnd && endTimeWithBuffer > eventStart;
-    
-    if (hasOverlap) {
-      console.log(`Overlap detected with event: ${event.summary}`);
-      console.log(`Existing: ${new Date(eventStart).toLocaleString()} - ${new Date(eventEnd).toLocaleString()}`);
-      console.log(`Requested: ${new Date(startTime).toLocaleString()} - ${new Date(endTime).toLocaleString()}`);
-      console.log(`With Buffer: ${new Date(startTime).toLocaleString()} - ${new Date(endTimeWithBuffer).toLocaleString()}`);
-      return false;
-    }
-  }
-  
-  return true;
-}
 // Cancel Appointment Tool
 server.tool(
 	"cancelAppointment",
