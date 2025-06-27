@@ -678,6 +678,7 @@ server.tool(
   }
 );
 
+
 // Corrected isTimeSlotAvailable function
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string): boolean {
   const bufferMinutes = 15; // 15 minute buffer after the meeting
