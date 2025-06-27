@@ -630,7 +630,6 @@ server.tool(
       try {
         await sendAppointmentEmail({
           to: userEmail,
-          emailType: 'created',
           appointmentDetails: {
             summary: `${summary} - ${userName}`,
             date: displayDate,
@@ -895,23 +894,6 @@ server.tool(
 			await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
 
 			// Send cancellation email if we have the client's email
-			if (clientEmail) {
-				try {
-					await sendAppointmentEmail({
-						to: clientEmail,
-						emailType: 'cancelled',
-						appointmentDetails: {
-							summary: eventToCancel.summary,
-							date: eventDate,
-							time: timeString,
-							userName: clientName
-						}
-					});
-				} catch (emailError) {
-					console.error('Failed to send cancellation email:', emailError);
-					// Continue with the response even if email fails
-				}
-			}
 
 			let responseText = `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${eventDate}\n⏰ **Time:** ${timeString}${userInfo}\n\n🗑️ The appointment has been permanently removed from your calendar and all attendees have been notified.`;
 			
