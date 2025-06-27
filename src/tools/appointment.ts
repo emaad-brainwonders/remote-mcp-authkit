@@ -625,9 +625,9 @@ await sendAppointmentEmail({
   to: userEmail,
   emailType: 'created',
   appointmentDetails: {
-    summary: appointmentTitle,
-    date: formattedDate,
-    time: formattedTime,
+    summary: ${summary} - ${userName},
+    date: displayDate,
+    time: displayStartTime,
     userName: userName
   }
 });
