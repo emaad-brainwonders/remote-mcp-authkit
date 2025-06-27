@@ -1,17 +1,17 @@
 import { z } from "zod";
 import { sendAppointmentEmail } from "./mail"; // Import the email function
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getEnv, getGoogleAccessToken } from "../env";
+//import { getEnv, getGoogleAccessToken } from "../env";
 
-const HARDCODED_GOOGLE_ACCESS_TOKEN = getGoogleAccessToken();
+const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NwGvrRXJ1jNlGvt8ytji4LyB8fgMftHpy-kVhDq1AzD0WLKX50g89FlFTDEcEpmbnn3BZJlv84ezw8iIgOcry-_nriB1oJvr1E5K4iJZnQGJvW6o8bIGRuqRPv46itwhcECge2oVjARmi6XjCbbSk6MA4teRajOashRaCgYKAW0SARQSFQHGX2MiVPm_M1TfQZFFe923_pu7lQ0175";
 
 
-const getAccessToken = (): string => {
+/*const getAccessToken = (): string => {
 	if (!HARDCODED_GOOGLE_ACCESS_TOKEN) {
 		throw new Error("Google OAuth access token is required.");
 	}
 	return HARDCODED_GOOGLE_ACCESS_TOKEN;
-};
+};*/
 
 // Helper: Format date to YYYY-MM-DD   
 function formatDateToString(date: Date): string {
