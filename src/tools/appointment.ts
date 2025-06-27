@@ -673,239 +673,625 @@ export function registerAppointmentTools(server: McpServer) {
 // ... (existing imports, helpers, and other tools above)
 
 // Cancel Appointment Tool (supports user info, NO confirmation step)
+// Enhanced Cancel Appointment Tool
 server.tool(
-   "cancelAppointment",
-   "Cancel an existing appointment from Google Calendar by searching for it by title, date, or user info",
-   {
-      summary: z.string().min(1).optional().describe("Title/summary of the appointment to cancel (optional if user info is provided)"),
-      date: z.string().min(1).optional().describe("Date of the appointment in YYYY-MM-DD format or relative expression (optional if user info is provided)"),
-      userName: z.string().optional().describe("Full name of the person booking the appointment (optional)"),
-      userEmail: z.string().email().optional().describe("Email address of the person booking (optional)"),
-      userPhone: z.string().optional().describe("Phone number of the person booking (optional)"),
-      exactMatch: z.coerce.boolean().default(false).describe("Whether to require exact title match (default: false for partial matching)")
-   },
-   async ({ summary, date, userName, userEmail, userPhone, exactMatch = false }) => {
-      try {
-         // Use date if provided, otherwise search for upcoming events
-         let events: any[] = [];
-         let displayDate = "";
-         if (date) {
-            const parsedDate = parseRelativeDate(date);
-            displayDate = formatDateForDisplay(parsedDate);
-            const startDateTime = `${parsedDate}T00:00:00+05:30`;
-            const endDateTime = `${parsedDate}T23:59:59+05:30`;
-            const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-               `timeMin=${encodeURIComponent(startDateTime)}&` +
-               `timeMax=${encodeURIComponent(endDateTime)}&` +
-               `singleEvents=true&` +
-               `orderBy=startTime`;
-            const searchResult = await makeCalendarApiRequest(searchUrl);
-            events = searchResult.items || [];
-         } else {
-            // No date: fetch next 30 days
-            const now = new Date().toISOString();
-            const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-            const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&timeMax=${encodeURIComponent(future)}&singleEvents=true&orderBy=startTime`;
-            const result = await makeCalendarApiRequest(url);
-            events = result.items || [];
-         }
+	"cancelAppointment",
+	"Cancel an existing appointment from Google Calendar by searching for it by title, date, or user info",
+	{
+		summary: z.string().min(1).optional().describe("Title/summary of the appointment to cancel (optional if user info is provided)"),
+		date: z.string().min(1).optional().describe("Date of the appointment in YYYY-MM-DD format or relative expression (optional if user info is provided)"),
+		userName: z.string().optional().describe("Full name of the person booking the appointment (optional)"),
+		userEmail: z.string().email().optional().describe("Email address of the person booking (optional)"),
+		userPhone: z.string().optional().describe("Phone number of the person booking (optional)"),
+		exactMatch: z.coerce.boolean().default(false).describe("Whether to require exact title match (default: false for partial matching)")
+	},
+	async ({ summary, date, userName, userEmail, userPhone, exactMatch = false }) => {
+		try {
+			// Validate that at least one search parameter is provided
+			if (!summary && !date && !userName && !userEmail && !userPhone) {
+				return {
+					content: [{
+						type: "text",
+						text: "❌ **Missing search criteria**\n\nPlease provide at least one of the following:\n- Appointment title/summary\n- Date of appointment\n- User name, email, or phone number"
+					}]
+				};
+			}
 
-         // Filter events
-         const matchingEvents = events.filter((event: any) => {
-            let baseMatch = true;
-            if (summary) {
-               baseMatch = exactMatch
-                  ? event.summary && event.summary.toLowerCase() === summary.toLowerCase()
-                  : event.summary && event.summary.toLowerCase().includes(summary.toLowerCase());
-            }
-            let userMatch = eventMatchesUser(event, { userName, userEmail, userPhone });
-            return (baseMatch && (userName || userEmail || userPhone ? userMatch : true)) || (!summary && userMatch);
-         });
+			// Determine search time window
+			let events = [];
+			let displayDate = "";
+			let searchTimeWindow = "";
 
-         if (matchingEvents.length === 0) {
-            return {
-               content: [{ type: "text", text: "No appointment found with the provided information." }],
-            };
-         }
-         if (matchingEvents.length > 1) {
-            const matchList = matchingEvents.map((event: any, index: number) => {
-               const start = event.start?.dateTime || event.start?.date;
-               let timeString = 'All day';
-               if (start && start.includes('T')) {
-                  timeString = new Date(start).toLocaleTimeString('en-IN', {
-                     hour: '2-digit',
-                     minute: '2-digit',
-                     timeZone: 'Asia/Kolkata'
-                  });
-               }
-               return `${index + 1}. ${event.summary} (${timeString})`;
-            }).join('\n');
-            return {
-               content: [
-                  {
-                     type: "text",
-                     text: `⚠️ **Multiple appointments found**\n\nFound ${matchingEvents.length} appointments:\n\n${matchList}\n\n💡 Please be more specific.`,
-                  },
-               ],
-            };
-         }
+			if (date) {
+				const parsedDate = parseRelativeDate(date);
+				if (!parsedDate) {
+					return {
+						content: [{
+							type: "text",
+							text: "❌ **Invalid date format**\n\nPlease use YYYY-MM-DD format or relative expressions like 'today', 'tomorrow', 'next week', etc."
+						}]
+					};
+				}
+				displayDate = formatDateForDisplay(parsedDate);
+				const startDateTime = `${parsedDate}T00:00:00+05:30`;
+				const endDateTime = `${parsedDate}T23:59:59+05:30`;
+				searchTimeWindow = `on ${displayDate}`;
+				
+				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+					`timeMin=${encodeURIComponent(startDateTime)}&` +
+					`timeMax=${encodeURIComponent(endDateTime)}&` +
+					`singleEvents=true&` +
+					`orderBy=startTime`;
+				const searchResult = await makeCalendarApiRequest(searchUrl);
+				events = searchResult.items || [];
+			} else {
+				// Search upcoming 30 days
+				const now = new Date().toISOString();
+				const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+				searchTimeWindow = "in the next 30 days";
+				
+				const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+					`timeMin=${encodeURIComponent(now)}&` +
+					`timeMax=${encodeURIComponent(future)}&` +
+					`singleEvents=true&` +
+					`orderBy=startTime`;
+				const result = await makeCalendarApiRequest(url);
+				events = result.items || [];
+			}
 
-         const eventToCancel = matchingEvents[0];
-         const start = eventToCancel.start?.dateTime || eventToCancel.start?.date;
-         let timeString = 'All day';
-         if (start && start.includes('T')) {
-            timeString = new Date(start).toLocaleTimeString('en-IN', {
-               hour: '2-digit',
-               minute: '2-digit',
-               timeZone: 'Asia/Kolkata'
-            });
-         }
+			if (events.length === 0) {
+				return {
+					content: [{
+						type: "text",
+						text: `📅 **No appointments found ${searchTimeWindow}**\n\nThere are no scheduled appointments in the specified time period.`
+					}]
+				};
+			}
 
-         const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToCancel.id}`;
-         await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
-         return {
-            content: [
-               {
-                  type: "text",
-                  text: `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${displayDate}\n⏰ **Time:** ${timeString}\n\n🗑️ The appointment has been permanently removed from your calendar.`,
-               },
-            ],
-         };
-      } catch (error) {
-         let errorMessage = 'An unexpected error occurred. Please try again.';
-         if (error instanceof Error) {
-            if (error.message.includes('404')) {
-               errorMessage = 'The appointment no longer exists or has already been cancelled.';
-            } else if (error.message.includes('403')) {
-               errorMessage = 'Permission denied. Please check your calendar access permissions.';
-            } else if (error.message.includes('401')) {
-               errorMessage = 'Authentication failed. Please re-authenticate with Google Calendar.';
-            } else {
-               errorMessage = error.message;
-            }
-         }
-         return { content: [{ type: "text", text: `❌ **Failed to cancel appointment**\n\n${errorMessage}` }] };
-      }
-   }
+			// Enhanced event filtering with better matching logic
+			const matchingEvents = events.filter((event) => {
+				let titleMatch = true;
+				let userMatch = true;
+
+				// Title/summary matching
+				if (summary) {
+					const eventTitle = event.summary?.toLowerCase() || '';
+					const searchTitle = summary.toLowerCase();
+					titleMatch = exactMatch 
+						? eventTitle === searchTitle
+						: eventTitle.includes(searchTitle);
+				}
+
+				// User information matching
+				if (userName || userEmail || userPhone) {
+					userMatch = false; // Start with false, set to true if any user criterion matches
+					
+					// Check in event title
+					if (userName && event.summary?.toLowerCase().includes(userName.toLowerCase())) {
+						userMatch = true;
+					}
+					
+					// Check in attendees
+					if (userEmail && event.attendees?.some(attendee => 
+						attendee.email?.toLowerCase() === userEmail.toLowerCase())) {
+						userMatch = true;
+					}
+					
+					// Check in description
+					if (userPhone && event.description?.includes(userPhone)) {
+						userMatch = true;
+					}
+					
+					// Check in description for name
+					if (userName && event.description?.toLowerCase().includes(userName.toLowerCase())) {
+						userMatch = true;
+					}
+				}
+
+				return titleMatch && userMatch;
+			});
+
+			if (matchingEvents.length === 0) {
+				let searchCriteria = [];
+				if (summary) searchCriteria.push(`title containing "${summary}"`);
+				if (userName) searchCriteria.push(`user name "${userName}"`);
+				if (userEmail) searchCriteria.push(`email "${userEmail}"`);
+				if (userPhone) searchCriteria.push(`phone "${userPhone}"`);
+				
+				return {
+					content: [{
+						type: "text",
+						text: `🔍 **No matching appointments found**\n\nSearched ${searchTimeWindow} for appointments with:\n${searchCriteria.map(c => `• ${c}`).join('\n')}\n\n💡 **Tips:**\n• Check spelling of names and titles\n• Try searching with just the date\n• Use partial matches (exactMatch is ${exactMatch ? 'ON' : 'OFF'})`
+					}]
+				};
+			}
+
+			if (matchingEvents.length > 1) {
+				const appointmentList = matchingEvents.map((event, index) => {
+					const start = event.start?.dateTime || event.start?.date;
+					const eventDate = start ? new Date(start).toLocaleDateString('en-IN') : 'Unknown date';
+					let timeString = 'All day';
+					
+					if (start && start.includes('T')) {
+						timeString = new Date(start).toLocaleTimeString('en-IN', {
+							hour: '2-digit',
+							minute: '2-digit',
+							timeZone: 'Asia/Kolkata'
+						});
+					}
+					
+					return `${index + 1}. **${event.summary}**\n   📅 ${eventDate} at ${timeString}`;
+				}).join('\n\n');
+
+				return {
+					content: [{
+						type: "text",
+						text: `⚠️ **Multiple appointments found (${matchingEvents.length})**\n\n${appointmentList}\n\n💡 **To cancel a specific appointment, please provide:**\n• More specific title\n• Exact date\n• Additional user information`
+					}]
+				};
+			}
+
+			// Cancel the single matching event
+			const eventToCancel = matchingEvents[0];
+			const start = eventToCancel.start?.dateTime || eventToCancel.start?.date;
+			const eventDate = start ? new Date(start).toLocaleDateString('en-IN') : 'Unknown date';
+			let timeString = 'All day';
+			
+			if (start && start.includes('T')) {
+				timeString = new Date(start).toLocaleTimeString('en-IN', {
+					hour: '2-digit',
+					minute: '2-digit',
+					timeZone: 'Asia/Kolkata'
+				});
+			}
+
+			// Extract user information from the event for confirmation
+			let userInfo = '';
+			if (eventToCancel.description) {
+				const nameMatch = eventToCancel.description.match(/Name: ([^\n]+)/);
+				const emailMatch = eventToCancel.description.match(/Email: ([^\n]+)/);
+				const phoneMatch = eventToCancel.description.match(/Phone: ([^\n]+)/);
+				
+				if (nameMatch || emailMatch || phoneMatch) {
+					userInfo = '\n👤 **Client Details:**\n';
+					if (nameMatch) userInfo += `Name: ${nameMatch[1]}\n`;
+					if (emailMatch) userInfo += `Email: ${emailMatch[1]}\n`;
+					if (phoneMatch) userInfo += `Phone: ${phoneMatch[1]}\n`;
+				}
+			}
+
+			// Perform the cancellation
+			const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToCancel.id}`;
+			await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
+
+			return {
+				content: [{
+					type: "text",
+					text: `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${eventDate}\n⏰ **Time:** ${timeString}${userInfo}\n\n🗑️ The appointment has been permanently removed from your calendar and all attendees have been notified.`
+				}]
+			};
+
+		} catch (error) {
+			let errorMessage = 'An unexpected error occurred while cancelling the appointment.';
+			
+			if (error instanceof Error) {
+				if (error.message.includes('404')) {
+					errorMessage = 'The appointment no longer exists or has already been cancelled.';
+				} else if (error.message.includes('403')) {
+					errorMessage = 'Permission denied. Please check your Google Calendar access permissions.';
+				} else if (error.message.includes('401')) {
+					errorMessage = 'Authentication failed. Please re-authenticate with Google Calendar.';
+				} else if (error.message.includes('400')) {
+					errorMessage = 'Invalid request. Please check the appointment details and try again.';
+				} else {
+					errorMessage = error.message;
+				}
+			}
+
+			return {
+				content: [{
+					type: "text",
+					text: `❌ **Failed to cancel appointment**\n\n${errorMessage}\n\n💡 **Troubleshooting:**\n• Verify the appointment exists\n• Check your calendar permissions\n• Try searching with different criteria`
+				}]
+			};
+		}
+	}
 );
 
-// ... (rest of your appointment tools and helpers)
-
-// ...existing imports and helpers...
-
+// Enhanced Reschedule Appointment Tool (uses cancel and schedule tools)
 server.tool(
-   "rescheduleAppointment",
-   "Reschedule an existing appointment to a new date and time using summary or user info",
-   {
-      summary: z.string().min(1).optional().describe("Title/summary of the appointment to reschedule (optional if user info is provided)"),
-      currentDate: z.string().min(1).optional().describe("Current date of the appointment in YYYY-MM-DD format or relative expression (optional if user info is provided)"),
-      userName: z.string().optional().describe("Full name of the person booking the appointment (optional)"),
-      userEmail: z.string().email().optional().describe("Email address of the person booking (optional)"),
-      userPhone: z.string().optional().describe("Phone number of the person booking (optional)"),
-      newDate: z.string().min(1).describe("New date for the appointment in YYYY-MM-DD format or relative expression"),
-      newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
-   },
-   async ({ summary, currentDate, userName, userEmail, userPhone, newDate, newStartTime }) => {
-      try {
-         // Normalize new date
-         const parsedNewDate = parseRelativeDate(newDate);
-         if (!parsedNewDate) {
-            return { content: [{ type: "text", text: "Invalid new date format." }] };
-         }
+	"rescheduleAppointment",
+	"Reschedule an existing appointment to a new date and time by canceling the old one and creating a new one",
+	{
+		// Original appointment search criteria
+		summary: z.string().min(1).optional().describe("Title/summary of the appointment to reschedule (optional if user info is provided)"),
+		currentDate: z.string().min(1).optional().describe("Current date of the appointment in YYYY-MM-DD format or relative expression (optional if user info is provided)"),
+		userName: z.string().optional().describe("Full name of the person booking the appointment (optional)"),
+		userEmail: z.string().email().optional().describe("Email address of the person booking (optional)"),
+		userPhone: z.string().optional().describe("Phone number of the person booking (optional)"),
+		
+		// New appointment details
+		newDate: z.string().min(1).describe("New date for the appointment in YYYY-MM-DD format or relative expression"),
+		newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
+		newSummary: z.string().optional().describe("New title/summary for the appointment (optional - keeps original if not provided)"),
+		newDescription: z.string().optional().describe("New description for the appointment (optional - keeps original if not provided)"),
+		newAppointmentType: z.enum(['online', 'offline']).optional().describe("New appointment type (optional - keeps original if not provided)"),
+		
+		// Options
+		checkAvailability: z.coerce.boolean().default(true).describe("Check if the new time slot is available before rescheduling"),
+		sendReminder: z.coerce.boolean().default(true).describe("Send email reminder for the new appointment"),
+	},
+	async ({ 
+		summary, 
+		currentDate, 
+		userName, 
+		userEmail, 
+		userPhone,
+		newDate, 
+		newStartTime, 
+		newSummary,
+		newDescription,
+		newAppointmentType,
+		checkAvailability = true,
+		sendReminder = true 
+	}) => {
+		try {
+			// Step 1: Validate inputs
+			if (!summary && !currentDate && !userName && !userEmail && !userPhone) {
+				return {
+					content: [{
+						type: "text",
+						text: "❌ **Missing search criteria**\n\nTo reschedule an appointment, please provide at least one of:\n• Appointment title/summary\n• Current date of appointment\n• User name, email, or phone number"
+					}]
+				};
+			}
 
-         // Compose new start and end times
-         const newStartDateTime = `${parsedNewDate}T${newStartTime}:00+05:30`;
-         const newStart = new Date(newStartDateTime);
-         if (isNaN(newStart.getTime())) {
-            return { content: [{ type: "text", text: "Invalid new start time." }] };
-         }
-         const newEnd = new Date(newStart.getTime() + 45 * 60 * 1000);
-         const newEndDateTime = newEnd.toISOString().replace('Z', '+05:30');
+			// Validate new date and time
+			const parsedNewDate = parseRelativeDate(newDate);
+			if (!parsedNewDate) {
+				return {
+					content: [{
+						type: "text",
+						text: "❌ **Invalid new date format**\n\nPlease use YYYY-MM-DD format or relative expressions like 'today', 'tomorrow', 'next week', etc."
+					}]
+				};
+			}
 
-         // Find the event to reschedule
-         let timeWindowStart, timeWindowEnd;
-         if (currentDate) {
-            const parsedCurrentDate = parseRelativeDate(currentDate);
-            timeWindowStart = `${parsedCurrentDate}T00:00:00+05:30`;
-            timeWindowEnd = `${parsedCurrentDate}T23:59:59+05:30`;
-         } else {
-            // Search next 30 days by default
-            timeWindowStart = new Date().toISOString();
-            timeWindowEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-         }
+			if (!validateTimeFormat(newStartTime)) {
+				return {
+					content: [{
+						type: "text",
+						text: "❌ **Invalid time format**\n\nPlease use HH:MM format (24-hour), e.g., '10:00', '14:30'"
+					}]
+				};
+			}
 
-         // Fetch events in window
-         const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeWindowStart)}&timeMax=${encodeURIComponent(timeWindowEnd)}&singleEvents=true&orderBy=startTime`;
-         const eventsRes = await makeCalendarApiRequest(eventsUrl);
-         const events = eventsRes.items || [];
+			// Step 2: Find the appointment to reschedule (similar logic to cancel tool)
+			let events = [];
+			let searchTimeWindow = "";
 
-         // Filter by summary and/or user info
-         const matchingEvents = events.filter((event: any) => {
-            let matches = true;
-            if (summary) matches &&= event.summary && event.summary.trim().toLowerCase() === summary.trim().toLowerCase();
-            if (userName) matches &&= event.summary && event.summary.toLowerCase().includes(userName.trim().toLowerCase());
-            if (userEmail) matches &&= event.attendees && event.attendees.some((a: any) => a.email && a.email.toLowerCase() === userEmail.trim().toLowerCase());
-            if (userPhone) matches &&= event.description && event.description.includes(userPhone.trim());
-            return matches;
-         });
+			if (currentDate) {
+				const parsedCurrentDate = parseRelativeDate(currentDate);
+				if (!parsedCurrentDate) {
+					return {
+						content: [{
+							type: "text",
+							text: "❌ **Invalid current date format**\n\nPlease use YYYY-MM-DD format or relative expressions."
+						}]
+					};
+				}
+				
+				const startDateTime = `${parsedCurrentDate}T00:00:00+05:30`;
+				const endDateTime = `${parsedCurrentDate}T23:59:59+05:30`;
+				searchTimeWindow = `on ${formatDateForDisplay(parsedCurrentDate)}`;
+				
+				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+					`timeMin=${encodeURIComponent(startDateTime)}&` +
+					`timeMax=${encodeURIComponent(endDateTime)}&` +
+					`singleEvents=true&` +
+					`orderBy=startTime`;
+				const searchResult = await makeCalendarApiRequest(searchUrl);
+				events = searchResult.items || [];
+			} else {
+				// Search upcoming 30 days
+				const now = new Date().toISOString();
+				const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+				searchTimeWindow = "in the next 30 days";
+				
+				const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+					`timeMin=${encodeURIComponent(now)}&` +
+					`timeMax=${encodeURIComponent(future)}&` +
+					`singleEvents=true&` +
+					`orderBy=startTime`;
+				const result = await makeCalendarApiRequest(url);
+				events = result.items || [];
+			}
 
-         if (matchingEvents.length === 0) {
-            return { content: [{ type: "text", text: "No appointment found matching the provided information. Double-check the title, date, and user info." }] };
-         }
-         if (matchingEvents.length > 1) {
-            const options = matchingEvents.map((event: any) => {
-               const start = event.start?.dateTime || event.start?.date;
-               return `- "${event.summary}" on ${start}`;
-            }).join('\n');
-            return { content: [{ type: "text", text: `Multiple possible appointments found:\n${options}\n\nSpecify the exact title and date to reschedule.` }] };
-         }
+			// Filter events using the same logic as cancel tool
+			const matchingEvents = events.filter((event) => {
+				let titleMatch = true;
+				let userMatch = true;
 
-         const eventToReschedule = matchingEvents[0];
+				if (summary) {
+					const eventTitle = event.summary?.toLowerCase() || '';
+					const searchTitle = summary.toLowerCase();
+					titleMatch = eventTitle.includes(searchTitle);
+				}
 
-         // Check for overlap in new slot
-         const newDayStart = `${parsedNewDate}T00:00:00+05:30`;
-         const newDayEnd = `${parsedNewDate}T23:59:59+05:30`;
-         const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(newDayStart)}&timeMax=${encodeURIComponent(newDayEnd)}&singleEvents=true&orderBy=startTime`;
-         const checkRes = await makeCalendarApiRequest(checkUrl);
-         const otherEvents = (checkRes.items || []).filter((e: any) => e.id !== eventToReschedule.id);
+				if (userName || userEmail || userPhone) {
+					userMatch = false;
+					
+					if (userName && event.summary?.toLowerCase().includes(userName.toLowerCase())) {
+						userMatch = true;
+					}
+					
+					if (userEmail && event.attendees?.some(attendee => 
+						attendee.email?.toLowerCase() === userEmail.toLowerCase())) {
+						userMatch = true;
+					}
+					
+					if (userPhone && event.description?.includes(userPhone)) {
+						userMatch = true;
+					}
+					
+					if (userName && event.description?.toLowerCase().includes(userName.toLowerCase())) {
+						userMatch = true;
+					}
+				}
 
-         const slotTaken = otherEvents.some((event: any) => {
-            const evStart = event.start?.dateTime ? new Date(event.start.dateTime) : null;
-            const evEnd = event.end?.dateTime ? new Date(event.end.dateTime) : null;
-            if (!evStart || !evEnd) return false;
-            return (newStart < evEnd && newEnd > evStart); // Slot overlap
-         });
-         if (slotTaken) {
-            return { content: [{ type: "text", text: "The new time slot is not available. Please choose another time." }] };
-         }
+				return titleMatch && userMatch;
+			});
 
-         // Update event
-         const updatedEvent = {
-            ...eventToReschedule,
-            start: { dateTime: newStartDateTime, timeZone: "Asia/Kolkata" },
-            end: { dateTime: newEndDateTime, timeZone: "Asia/Kolkata" },
-         };
-         const updateUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToReschedule.id}`;
-         const result = await makeCalendarApiRequest(updateUrl, {
-            method: "PUT",
-            body: JSON.stringify(updatedEvent),
-         });
+			if (matchingEvents.length === 0) {
+				return {
+					content: [{
+						type: "text",
+						text: `🔍 **No matching appointments found**\n\nSearched ${searchTimeWindow} but couldn't find an appointment matching your criteria.\n\n💡 Please verify:\n• Appointment title/summary\n• Current date\n• User information`
+					}]
+				};
+			}
 
-         // Success output
-         const startTime = newStart.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
-         const endTime = newEnd.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
-         return {
-            content: [{
-               type: "text",
-               text: `✅ Appointment rescheduled to ${parsedNewDate} from ${startTime} to ${endTime}.\nEvent: ${eventToReschedule.summary}`,
-            }]
-         };
-      } catch (error) {
-         return {
-            content: [{ type: "text", text: `❌ Failed to reschedule appointment: ${error instanceof Error ? error.message : error}` }]
-         };
-      }
-   }
+			if (matchingEvents.length > 1) {
+				const appointmentList = matchingEvents.map((event, index) => {
+					const start = event.start?.dateTime || event.start?.date;
+					const eventDate = start ? new Date(start).toLocaleDateString('en-IN') : 'Unknown date';
+					let timeString = 'All day';
+					
+					if (start && start.includes('T')) {
+						timeString = new Date(start).toLocaleTimeString('en-IN', {
+							hour: '2-digit',
+							minute: '2-digit',
+							timeZone: 'Asia/Kolkata'
+						});
+					}
+					
+					return `${index + 1}. **${event.summary}**\n   📅 ${eventDate} at ${timeString}`;
+				}).join('\n\n');
+
+				return {
+					content: [{
+						type: "text",
+						text: `⚠️ **Multiple appointments found (${matchingEvents.length})**\n\n${appointmentList}\n\n💡 Please be more specific with:\n• Exact appointment title\n• Specific date\n• Additional user details`
+					}]
+				};
+			}
+
+			// Step 3: Extract information from the original appointment
+			const originalEvent = matchingEvents[0];
+			const originalStart = originalEvent.start?.dateTime || originalEvent.start?.date;
+			const originalDate = originalStart ? new Date(originalStart).toLocaleDateString('en-IN') : 'Unknown date';
+			let originalTime = 'All day';
+			
+			if (originalStart && originalStart.includes('T')) {
+				originalTime = new Date(originalStart).toLocaleTimeString('en-IN', {
+					hour: '2-digit',
+					minute: '2-digit',
+					timeZone: 'Asia/Kolkata'
+				});
+			}
+
+			// Extract user information from original event
+			let extractedUserName = userName;
+			let extractedUserEmail = userEmail;
+			let extractedUserPhone = userPhone;
+			let extractedAppointmentType = newAppointmentType;
+			let extractedDescription = newDescription || originalEvent.description;
+
+			if (originalEvent.description) {
+				const nameMatch = originalEvent.description.match(/Name: ([^\n]+)/);
+				const emailMatch = originalEvent.description.match(/Email: ([^\n]+)/);
+				const phoneMatch = originalEvent.description.match(/Phone: ([^\n]+)/);
+				const typeMatch = originalEvent.description.match(/Type: (\w+)/);
+
+				if (!extractedUserName && nameMatch) extractedUserName = nameMatch[1];
+				if (!extractedUserEmail && emailMatch) extractedUserEmail = emailMatch[1];
+				if (!extractedUserPhone && phoneMatch) extractedUserPhone = phoneMatch[1];
+				if (!extractedAppointmentType && typeMatch) {
+					extractedAppointmentType = typeMatch[1].toLowerCase().includes('online') ? 'online' : 'offline';
+				}
+			}
+
+			// Get attendees from original event
+			const originalAttendees = originalEvent.attendees?.map(attendee => attendee.email).filter(email => email !== extractedUserEmail) || [];
+
+			// Step 4: Check availability for new time slot if requested
+			if (checkAvailability) {
+				const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
+				const newStartDateObj = new Date(newStartDateTime);
+				const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
+				
+				const dayStartTime = `${parsedNewDate}T00:00:00+05:30`;
+				const dayEndTime = `${parsedNewDate}T23:59:59+05:30`;
+				const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+					`timeMin=${encodeURIComponent(dayStartTime)}&` +
+					`timeMax=${encodeURIComponent(dayEndTime)}&` +
+					`singleEvents=true&` +
+					`orderBy=startTime`;
+				const checkResult = await makeCalendarApiRequest(checkUrl);
+				const existingEvents = (checkResult.items || []).filter(event => event.id !== originalEvent.id);
+				
+				if (!isTimeSlotAvailable(existingEvents, newStartDateTime, newEndDateObj.toISOString().slice(0, 19))) {
+					const displayNewDate = formatDateForDisplay(parsedNewDate);
+					const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+						hour: '2-digit',
+						minute: '2-digit',
+						timeZone: 'Asia/Kolkata'
+					});
+					const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+						hour: '2-digit',
+						minute: '2-digit',
+						timeZone: 'Asia/Kolkata'
+					});
+					
+					return {
+						content: [{
+							type: "text",
+							text: `⚠️ **New time slot unavailable**\n\nThe requested time slot ${displayStartTime} - ${displayEndTime} on ${displayNewDate} conflicts with an existing appointment.\n\n💡 **Suggestions:**\n• Try a different time\n• Use 'recommendAppointmentTimes' tool to find available slots\n• Set checkAvailability to false to override (not recommended)`
+						}]
+					};
+				}
+			}
+
+			// Step 5: Cancel the original appointment
+			const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`;
+			await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
+
+			// Step 6: Create the new appointment using the scheduleAppointment logic
+			if (!extractedUserName || !extractedUserEmail || !extractedUserPhone) {
+				return {
+					content: [{
+						type: "text",
+						text: `❌ **Missing required user information**\n\nCould not extract complete user information from the original appointment. Please provide:\n${!extractedUserName ? '• User name\n' : ''}${!extractedUserEmail ? '• User email\n' : ''}${!extractedUserPhone ? '• User phone\n' : ''}\n\n⚠️ **Note:** The original appointment has been cancelled but the new one could not be created.`
+					}]
+				};
+			}
+
+			// Create new appointment
+			const newAppointmentSummary = newSummary || originalEvent.summary;
+			const finalAppointmentType = extractedAppointmentType || 'online';
+			
+			const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
+			const newStartDateObj = new Date(newStartDateTime);
+			const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
+			const newEndDateTime = newEndDateObj.toISOString().slice(0, 19);
+
+			const today = getCurrentDate();
+			const appointmentDetails = [
+				`👤 **Client Information:**`,
+				`Name: ${extractedUserName}`,
+				`Email: ${extractedUserEmail}`,
+				`Phone: ${extractedUserPhone}`,
+				``,
+				`📋 **Appointment Details:**`,
+				`Type: ${finalAppointmentType.charAt(0).toUpperCase() + finalAppointmentType.slice(1)} Meeting`,
+				`Duration: 45 minutes`,
+			];
+
+			if (extractedDescription && !extractedDescription.includes('Client Information:')) {
+				appointmentDetails.push(``, `📝 **Additional Notes:**`, extractedDescription);
+			}
+
+			appointmentDetails.push(``, `🕐 **Rescheduled on:** ${today}`);
+			appointmentDetails.push(`📅 **Originally scheduled:** ${originalDate} at ${originalTime}`);
+
+			const fullDescription = appointmentDetails.join('\n');
+
+			const newEvent = {
+				summary: `${newAppointmentSummary} - ${extractedUserName}`,
+				description: fullDescription,
+				start: { dateTime: `${newStartDateTime}:00`, timeZone: "Asia/Kolkata" },
+				end: { dateTime: `${newEndDateTime}:00`, timeZone: "Asia/Kolkata" },
+				attendees: [extractedUserEmail, ...originalAttendees].map(email => ({ email })),
+				reminders: sendReminder ? {
+					useDefault: false,
+					overrides: [
+						{ method: 'email', minutes: 24 * 60 },
+						{ method: 'popup', minutes: 30 },
+					],
+				} : undefined,
+			};
+
+			const result = await makeCalendarApiRequest(
+				"https://www.googleapis.com/calendar/v3/calendars/primary/events",
+				{
+					method: "POST",
+					body: JSON.stringify(newEvent),
+				}
+			);
+
+			// Step 7: Success response
+			const displayNewDate = formatDateForDisplay(parsedNewDate);
+			const displayNewStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+			const displayNewEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+
+			let responseText = `✅ **Appointment rescheduled successfully!**\n\n`;
+			responseText += `🔄 **Reschedule Details:**\n`;
+			responseText += `**From:** ${originalDate} at ${originalTime}\n`;
+			responseText += `**To:** ${displayNewDate} at ${displayNewStartTime} - ${displayNewEndTime}\n\n`;
+			responseText += `👤 **Client:** ${extractedUserName}\n`;
+			responseText += `📧 **Email:** ${extractedUserEmail}\n`;
+			responseText += `📱 **Phone:** ${extractedUserPhone}\n\n`;
+			responseText += `📋 **Event:** ${newAppointmentSummary}\n`;
+			responseText += `🔗 **Type:** ${finalAppointmentType.charAt(0).toUpperCase() + finalAppointmentType.slice(1)} Meeting\n`;
+
+			if (extractedDescription && !extractedDescription.includes('Client Information:')) {
+				responseText += `📝 **Description:** ${extractedDescription}\n`;
+			}
+
+			if (originalAttendees.length > 0) {
+				responseText += `👥 **Additional Attendees:** ${originalAttendees.join(', ')}\n`;
+			}
+
+			if (result.htmlLink) {
+				responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
+			}
+
+			if (sendReminder) {
+				responseText += `\n\n📨 **Reminders:** Email reminder will be sent 1 day before, popup reminder 30 minutes before`;
+			}
+
+			responseText += `\n\n🎉 Your appointment has been successfully rescheduled and all attendees have been notified of the change.`;
+
+			return {
+				content: [{
+					type: "text",
+					text: responseText,
+				}]
+			};
+
+		} catch (error) {
+			let errorMessage = 'An unexpected error occurred while rescheduling the appointment.';
+			
+			if (error instanceof Error) {
+				if (error.message.includes('404')) {
+					errorMessage = 'The original appointment no longer exists or has already been cancelled.';
+				} else if (error.message.includes('403')) {
+					errorMessage = 'Permission denied. Please check your Google Calendar access permissions.';
+				} else if (error.message.includes('401')) {
+					errorMessage = 'Authentication failed. Please re-authenticate with Google Calendar.';
+				} else if (error.message.includes('400')) {
+					errorMessage = 'Invalid request. Please check the appointment details and try again.';
+				} else {
+					errorMessage = error.message;
+				}
+			}
+
+			return {
+				content: [{
+					type: "text",
+					text: `❌ **Failed to reschedule appointment**\n\n${errorMessage}\n\n💡 **Troubleshooting:**\n• Verify the original appointment exists\n• Check new date and time format\n• Ensure you have calendar permissions\n• Try with more specific search criteria`
+				}]
+			};
+		}
+	}
 );
 // Get User Appointments Tool
 server.tool(
