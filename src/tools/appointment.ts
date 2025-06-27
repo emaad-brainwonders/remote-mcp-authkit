@@ -951,11 +951,11 @@ server.tool(
         const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
         const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&timeMax=${encodeURIComponent(future)}&singleEvents=true&orderBy=startTime`;
         const result = await makeCalendarApiRequest(url);
-        const events = (result.items || []).filter(event => eventMatchesUser(event, { userName, userEmail, userPhone }));
+        const events = (result.items || []).filter((event: any) => eventMatchesUser(event, { userName, userEmail, userPhone }));
         if (events.length === 0) {
             return { content: [{ type: "text", text: "No upcoming appointments found for the provided information." }] };
         }
-        const list = events.map(event => {
+        const list = events.map((event: any) => {
             const date = event.start?.dateTime
                 ? new Date(event.start.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
                 : event.start?.date;
@@ -964,6 +964,5 @@ server.tool(
         return { content: [{ type: "text", text: `Your upcoming appointments:\n${list}` }] };
     }
 );
-
 	
 }
