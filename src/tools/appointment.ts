@@ -1,6 +1,8 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { sendAppointmentEmailLogic, scheduleAppointmentRemindersLogic } from './mail';
+
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
 const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NySerbUeUlttl4xYIC9Njp3c29juiUg4uYgAFEMQ8vpuu4DrzpKefU-Z7McWboXRNE4fiFFFL07ZMtiJFYpoLPpPedjZDi7bGEBoNfEfB7A60wIrzQ6wxq555nmoHXQ5Rt6_AXVT1WXA9tBrhGnv3D23oCPDG51kJmzaCgYKAdISARQSFQHGX2MiVHdTa4DbBlLnC8GTM6lagA0175";
