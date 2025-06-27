@@ -3,7 +3,7 @@ import { z } from "zod";
 
 // Email configuration
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
-const ACCESS_TOKEN = "ya29.a0AS3H6NySerbUeUlttl4xYIC9Njp3c29juiUg4uYgAFEMQ8vpuu4DrzpKefU-Z7McWboXRNE4fiFFFL07ZMtiJFYpoLPpPedjZDi7bGEBoNfEfB7A60wIrzQ6wxq555nmoHXQ5Rt6_AXVT1WXA9tBrhGnv3D23oCPDG51kJmzaCgYKAdISARQSFQHGX2MiVHdTa4DbBlLnC8GTM6lagA0175"; // Replace with your actual token
+const ACCESS_TOKEN = "ya29.a0AS3H6Nz-igH0d66-715u19B0Nxpb9GHGUARVB63JU4gIz2TqCHYLuxJncyuWDY_nVD3Mzem87WI_XTtKmGInZW8BwrqCB1PTBShGAFQDBijCUS1MKEKWCaqdy3J0xdM0828nTZYSde-k4bqsp4Mxke-rosG8NSKz2VY1Nb6qaCgYKAWISARQSFQHGX2MixUEaKf8xCd7gClnaR7NzgQ0175"; // Replace with your actual token
 
 // Email templates
 const EMAIL_TEMPLATES = {
