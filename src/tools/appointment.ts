@@ -5,7 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NxXvKyPg-5K-naPVwLHu6yxFjKmf7bwEqP4m3j1HYaOYV8ytICnHhaWhAc3v1-uDEmGwF3TI6Ltq0LpmfzLatcF1GqVGPI3A6VwYQdhBcbBeFKb5Iw3U_T4o7k1S73aRqRmkN4Gvl9iYUM8codhmdSzB7n454ey6Zb80QaCgYKAWMSARQSFQHGX2MisonvDFZs-W9LUQLwZH1w-Q0177";
+const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NwahUIvEG76O-hEYPHSourmrt3_U51CCt3yv5ErnwjR7--6gcCqH-jP4Mg2JqxGziaUvyhz55QykS5coTAomFhoy46D0jd5KR02fAboaj6sM32N5uwKjf6KZLMy9WdkFSOG0H8jIuWG2rgaYlKUwF0KUXHcrbroLGxS6waCgYKAeYSARQSFQHGX2MiyFomdRMDRA70UvlcZ6QNLQ0177";
 
 const getAccessToken = (): string => {
 	if (!HARDCODED_GOOGLE_ACCESS_TOKEN) {
