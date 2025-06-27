@@ -749,7 +749,7 @@ server.tool(
 			}
 
 			// Enhanced event filtering with better matching logic
-			const matchingEvents = events.filter((event) => {
+			const matchingEvents = events.filter((event: any) => {
 				let titleMatch = true;
 				let userMatch = true;
 
@@ -772,7 +772,7 @@ server.tool(
 					}
 					
 					// Check in attendees
-					if (userEmail && event.attendees?.some(attendee => 
+					if (userEmail && event.attendees?.some((attendee: any) => 
 						attendee.email?.toLowerCase() === userEmail.toLowerCase())) {
 						userMatch = true;
 					}
@@ -807,7 +807,7 @@ server.tool(
 			}
 
 			if (matchingEvents.length > 1) {
-				const appointmentList = matchingEvents.map((event, index) => {
+				const appointmentList = matchingEvents.map((event: any, index: number) => {
 					const start = event.start?.dateTime || event.start?.date;
 					const eventDate = start ? new Date(start).toLocaleDateString('en-IN') : 'Unknown date';
 					let timeString = 'All day';
@@ -1008,7 +1008,7 @@ server.tool(
 			}
 
 			// Filter events using the same logic as cancel tool
-			const matchingEvents = events.filter((event) => {
+			const matchingEvents = events.filter((event: any) => {
 				let titleMatch = true;
 				let userMatch = true;
 
@@ -1025,7 +1025,7 @@ server.tool(
 						userMatch = true;
 					}
 					
-					if (userEmail && event.attendees?.some(attendee => 
+					if (userEmail && event.attendees?.some((attendee: any) => 
 						attendee.email?.toLowerCase() === userEmail.toLowerCase())) {
 						userMatch = true;
 					}
@@ -1052,7 +1052,7 @@ server.tool(
 			}
 
 			if (matchingEvents.length > 1) {
-				const appointmentList = matchingEvents.map((event, index) => {
+				const appointmentList = matchingEvents.map((event: any, index: number) => {
 					const start = event.start?.dateTime || event.start?.date;
 					const eventDate = start ? new Date(start).toLocaleDateString('en-IN') : 'Unknown date';
 					let timeString = 'All day';
@@ -1112,7 +1112,7 @@ server.tool(
 			}
 
 			// Get attendees from original event
-			const originalAttendees = originalEvent.attendees?.map(attendee => attendee.email).filter(email => email !== extractedUserEmail) || [];
+			const originalAttendees = originalEvent.attendees?.map((attendee: any) => attendee.email).filter((email: string) => email !== extractedUserEmail) || [];
 
 			// Step 4: Check availability for new time slot if requested
 			if (checkAvailability) {
@@ -1128,7 +1128,7 @@ server.tool(
 					`singleEvents=true&` +
 					`orderBy=startTime`;
 				const checkResult = await makeCalendarApiRequest(checkUrl);
-				const existingEvents = (checkResult.items || []).filter(event => event.id !== originalEvent.id);
+				const existingEvents = (checkResult.items || []).filter((event: any) => event.id !== originalEvent.id);
 				
 				if (!isTimeSlotAvailable(existingEvents, newStartDateTime, newEndDateObj.toISOString().slice(0, 19))) {
 					const displayNewDate = formatDateForDisplay(parsedNewDate);
@@ -1201,7 +1201,7 @@ server.tool(
 				description: fullDescription,
 				start: { dateTime: `${newStartDateTime}:00`, timeZone: "Asia/Kolkata" },
 				end: { dateTime: `${newEndDateTime}:00`, timeZone: "Asia/Kolkata" },
-				attendees: [extractedUserEmail, ...originalAttendees].map(email => ({ email })),
+				attendees: [extractedUserEmail, ...originalAttendees].map((email: string) => ({ email })),
 				reminders: sendReminder ? {
 					useDefault: false,
 					overrides: [
