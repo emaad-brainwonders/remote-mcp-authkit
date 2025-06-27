@@ -482,7 +482,7 @@ export function registerAppointmentTools(server: McpServer) {
 		appointmentType: z.enum(['online', 'offline']).describe("Type of appointment: 'online' for virtual meetings, 'offline' for in-person meetings"),
 		
 		// Meeting Details for online appointments only
-		meetingLink: z.string().url().optional().describe("Meeting link for online appointments (Zoom, Teams, Meet, etc.)");
+		meetingLink: z.string().url().optional().describe("Meeting link for online appointments (Zoom, Teams, Meet, etc.)"),
 		
 		// Date and Time
 		date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
