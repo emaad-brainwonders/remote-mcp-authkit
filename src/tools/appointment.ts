@@ -145,20 +145,37 @@ function validateTimeFormat(time: string): boolean {
 
 // Helper: Check if a time slot is available
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
-  const startTime = new Date(meetingStart).getTime();
-  const endTime = new Date(meetingEnd).getTime();
-  const bufferEndTime = endTime + bufferMinutes * 60 * 1000;
-
+  const startTime = new Date(meetingStart + '+05:30').getTime();
+  const endTime = new Date(meetingEnd + '+05:30').getTime();
+  
+  // Add buffer AFTER the meeting end time (always 15 minutes regardless of parameter)
+  const endTimeWithBuffer = endTime + (15 * 60 * 1000); // Fixed 15-minute buffer
+  
   for (const event of events) {
-    const eventStart = new Date(event.start?.dateTime || event.start?.date).getTime();
-    const eventEnd = new Date(event.end?.dateTime || event.end?.date).getTime();
-
-    // Check if any event overlaps with [startTime → bufferEndTime]
-    const isOverlap = startTime < eventEnd && bufferEndTime > eventStart;
-    if (isOverlap) return false;
+    // Skip all-day events
+    if (!event.start?.dateTime || !event.end?.dateTime) {
+      continue;
+    }
+    
+    const eventStart = new Date(event.start.dateTime).getTime();
+    const eventEnd = new Date(event.end.dateTime).getTime();
+    
+    // Check for overlap: our meeting (with buffer) overlaps with existing event
+    // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
+    const hasOverlap = startTime < eventEnd && endTimeWithBuffer > eventStart;
+    
+    if (hasOverlap) {
+      console.log(`Overlap detected with event: ${event.summary}`);
+      console.log(`Existing: ${new Date(eventStart).toLocaleString()} - ${new Date(eventEnd).toLocaleString()}`);
+      console.log(`Requested: ${new Date(startTime).toLocaleString()} - ${new Date(endTime).toLocaleString()}`);
+      console.log(`With Buffer: ${new Date(startTime).toLocaleString()} - ${new Date(endTimeWithBuffer).toLocaleString()}`);
+      return false;
+    }
   }
+  
   return true;
 }
+
 
 
 // Helper: Parse attendees from various input formats
