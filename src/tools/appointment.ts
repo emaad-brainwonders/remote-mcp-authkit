@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // WARNING: Never use real tokens in public/prod; this is for demo only.
-const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6Nw4q4cr4Z0cIAcW56S60VmpCWnKqOGjUYJ6FAMQ1hnGRhHFSpdJXOr-y6U_eYyhTEvm-ATOdKSklhjsoLOQpdYTRsZS7WV2SEdsq3t2NqZoE0F5hrgn9Apk3h_5O4zhV7s6B-htAx0JylWDSQuehrqtlT4tDAAl-F3ElgaCgYKAXYSARQSFQHGX2MiTO95tchgGa9KLM6ognh45A0177";
+const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NwdIDmoT542XsJnHfnbys0BLBwSylzTau9j6UdKjA2K55gYXCtrS5ebuLrnGTxm_3RBgdMid_gM41VAPq_N22MauEx8kDtF6acqsbb4yAREJxYik9yD8tsPYT0opv-U1UFZGsF3E7LmXdxYcCUrhPawoj26GYEdbMnwaCgYKAWESARQSFQHGX2MiV9FoTnIKYVJTHW_0g2e1yw0175";
 
 const getAccessToken = (): string => {
 	if (!HARDCODED_GOOGLE_ACCESS_TOKEN) {
@@ -240,94 +240,218 @@ async function makeCalendarApiRequest(url: string, options: RequestInit = {}): P
 export function registerAppointmentTools(server: McpServer) {
 	// Get schedule for a specific date
 	server.tool(
-		"getSchedule",
-		"Get the schedule for a specific date from Google Calendar. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
-		{
-			date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', 'next week', etc."),
-		},
-		async ({ date }) => {
-			try {
-				// Parse the date input to handle relative expressions
-				const parsedDate = parseRelativeDate(date);
-				const displayDate = formatDateForDisplay(parsedDate);
+	"scheduleAppointment",
+	"Schedule a counselling session via Google Calendar (uses Asia/Kolkata timezone). Supports relative dates like 'today', 'tomorrow', '10 days from now', etc.",
+	{
+		userName: z.string().min(1).describe("Name of the person for whom the counselling session is being scheduled"),
+		userEmail: z.string().email().describe("Email address of the person for whom the counselling session is being scheduled"),
+		appointmentType: z.enum(["online", "offline"]).describe("Type of appointment - 'online' for virtual meeting or 'offline' for in-person meeting"),
+		location: z.string().optional().describe("Location details - for online: meeting platform/link, for offline: physical address/room number"),
+		description: z.string().optional().describe("Additional session description (optional)"),
+		date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', etc."),
+		startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("Start time in HH:MM format (24-hour), e.g., '10:00' (session will automatically be 45 minutes long)"),
+		additionalAttendees: z.union([
+			z.array(z.string().email()),
+			z.string()
+		]).default([]).describe("Array of additional attendee email addresses (besides the user) or a JSON string of emails"),
+		checkAvailability: z.coerce.boolean().default(true).describe("Check if the time slot is available before scheduling"),
+	},
+	async ({
+		userName,
+		userEmail,
+		appointmentType,
+		location,
+		description,
+		date,
+		startTime,
+		additionalAttendees = [],
+		checkAvailability = true,
+	}) => {
+		try {
+			const today = getCurrentDate();
+			
+			// Automatically generate the summary with the user's name and appointment type
+			const summary = `Counselling session of ${userName} (${appointmentType.toUpperCase()})`;
+			
+			// Generate default location if not provided
+			let appointmentLocation = location;
+			if (!appointmentLocation) {
+				appointmentLocation = appointmentType === "online" 
+					? "Online meeting (link to be shared)" 
+					: "Office location (to be confirmed)";
+			}
+			
+			// Parse the date input to handle relative expressions
+			const parsedDate = parseRelativeDate(date);
+			const displayDate = formatDateForDisplay(parsedDate);
+			
+			// Validate time format (additional check)
+			if (!validateTimeFormat(startTime)) {
+				throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
+			}
+			
+			// Calculate end time (45 minutes after start time)
+			const startDate = new Date(`${parsedDate}T${startTime}:00`);
+			const endDate = new Date(startDate.getTime() + 45 * 60 * 1000); // Add 45 minutes
+			
+			// Format end time back to HH:MM format
+			const endTime = endDate.toTimeString().slice(0, 5);
+			
+			// Parse additional attendees from various input formats
+			const parsedAdditionalAttendees = parseAttendeesInput(additionalAttendees);
+			
+			// Combine user email with additional attendees
+			const allAttendees = [userEmail, ...parsedAdditionalAttendees];
+			
+			// Construct full datetime strings
+			const startDateTime = `${parsedDate}T${startTime}:00`;
+			const endDateTime = `${parsedDate}T${endTime}:00`;
+			
+			// Format times for display
+			const displayStartTime = startDate.toLocaleTimeString('en-IN', { 
+				hour: '2-digit', 
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+			const displayEndTime = endDate.toLocaleTimeString('en-IN', { 
+				hour: '2-digit', 
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+			
+			// Check availability if requested
+			if (checkAvailability) {
+				const dayStartTime = `${parsedDate}T00:00:00+05:30`;
+				const dayEndTime = `${parsedDate}T23:59:59+05:30`;
 				
-				// Set time bounds for the day in Asia/Kolkata timezone
-				const startDateTime = `${parsedDate}T00:00:00+05:30`;
-				const endDateTime = `${parsedDate}T23:59:59+05:30`;
-				
-				const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-					`timeMin=${encodeURIComponent(startDateTime)}&` +
-					`timeMax=${encodeURIComponent(endDateTime)}&` +
+				const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+					`timeMin=${encodeURIComponent(dayStartTime)}&` +
+					`timeMax=${encodeURIComponent(dayEndTime)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
 				
-				const result = await makeCalendarApiRequest(url);
-				const events = result.items || [];
+				const checkResult = await makeCalendarApiRequest(checkUrl);
+				const existingEvents = checkResult.items || [];
 				
-				if (events.length === 0) {
+				if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime)) {
 					return {
 						content: [
 							{
 								type: "text",
-								text: `🗓️ You have a completely free day on ${displayDate}! No appointments scheduled.`,
+								text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots that work for you.`,
 							},
 						],
 					};
 				}
-				
-				const scheduleText = events
-					.map((event: any, index: number) => {
-						const start = event.start?.dateTime || event.start?.date;
-						const end = event.end?.dateTime || event.end?.date;
-						
-						let timeString = 'All day';
-						if (start && start.includes('T')) {
-							const startTime = new Date(start).toLocaleTimeString('en-IN', { 
-								hour: '2-digit', 
-								minute: '2-digit',
-								timeZone: 'Asia/Kolkata'
-							});
-							
-							if (end && end.includes('T')) {
-								const endTime = new Date(end).toLocaleTimeString('en-IN', { 
-									hour: '2-digit', 
-									minute: '2-digit',
-									timeZone: 'Asia/Kolkata'
-								});
-								timeString = `${startTime} - ${endTime}`;
-							} else {
-								timeString = startTime;
-							}
+			}
+			
+			// Build full description
+			const fullDescriptionParts = [
+				`Counselling session for: ${userName} (${userEmail})`,
+				`Appointment Type: ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)}`,
+				`Location: ${appointmentLocation}`
+			];
+			
+			if (description) {
+				fullDescriptionParts.push(`Additional Notes: ${description}`);
+			}
+			
+			fullDescriptionParts.push(`Scheduled on: ${today}`);
+			
+			const fullDescription = fullDescriptionParts.join('\n');
+			
+			const event = {
+				summary,
+				description: fullDescription,
+				location: appointmentLocation,
+				start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
+				end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
+				attendees: allAttendees.map(email => ({ email })),
+			};
+			
+			// Add Google Meet link for online appointments
+			if (appointmentType === "online" && !location) {
+				event.conferenceData = {
+					createRequest: {
+						requestId: `counselling-${Date.now()}`,
+						conferenceSolutionKey: {
+							type: "hangoutsMeet"
 						}
-						
-						const eventTitle = event.summary || 'Untitled Event';
-						return `${index + 1}. **${eventTitle}** - ${timeString}`;
-					})
-					.join('\n');
-				
-				const eventCount = events.length;
-				const pluralText = eventCount === 1 ? 'appointment' : 'appointments';
-				
-				return {
-					content: [
-						{
-							type: "text",
-							text: `📅 **Your schedule for ${displayDate}**\n\nYou have ${eventCount} ${pluralText} planned:\n\n${scheduleText}`,
-						},
-					],
-				};
-			} catch (error) {
-				return {
-					content: [
-						{
-							type: "text",
-							text: `❌ I couldn't retrieve your schedule. ${error instanceof Error ? error.message : 'Please try again later.'}`,
-						},
-					],
+					}
 				};
 			}
+			
+			const result = await makeCalendarApiRequest(
+				"https://www.googleapis.com/calendar/v3/calendars/primary/events",
+				{
+					method: "POST",
+					body: JSON.stringify(event),
+				},
+				// Add conferenceDataVersion parameter for Google Meet integration
+				appointmentType === "online" && !location ? "?conferenceDataVersion=1" : ""
+			);
+			
+			// Determine appointment type emoji and details
+			const typeEmoji = appointmentType === "online" ? "💻" : "🏢";
+			const typeText = appointmentType === "online" ? "Online" : "In-Person";
+			
+			let responseText = `✅ **Counselling session scheduled successfully!**\n\n`;
+			responseText += `📋 **Session:** ${summary}\n`;
+			responseText += `👤 **Client:** ${userName} (${userEmail})\n`;
+			responseText += `${typeEmoji} **Type:** ${typeText}\n`;
+			responseText += `📍 **Location:** ${appointmentLocation}\n`;
+			responseText += `📅 **Date:** ${displayDate}\n`;
+			responseText += `⏰ **Duration:** 45 minutes (${displayStartTime} - ${displayEndTime})\n`;
+			
+			// Add Google Meet link if available
+			if (result.conferenceData && result.conferenceData.entryPoints) {
+				const meetLink = result.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
+				if (meetLink) {
+					responseText += `🔗 **Meeting Link:** ${meetLink.uri}\n`;
+				}
+			}
+			
+			if (description) {
+				responseText += `📝 **Additional Notes:** ${description}\n`;
+			}
+			
+			if (allAttendees.length > 0) {
+				responseText += `👥 **All Attendees:** ${allAttendees.join(', ')}\n`;
+			}
+			
+			if (result.htmlLink) {
+				responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
+			}
+			
+			responseText += `\n\n🎉 All set! The counselling session has been added to your calendar and all attendees have been notified.`;
+			
+			// Add specific instructions based on appointment type
+			if (appointmentType === "online") {
+				responseText += `\n\n💡 **Online Meeting Tips:**\n- Ensure stable internet connection\n- Test your camera and microphone beforehand\n- Join the meeting 5 minutes early`;
+			} else {
+				responseText += `\n\n💡 **In-Person Meeting Tips:**\n- Please arrive 10 minutes early\n- Bring any relevant documents\n- Contact us if you need directions`;
+			}
+			
+			return {
+				content: [
+					{
+						type: "text",
+						text: responseText,
+					},
+				],
+			};
+		} catch (error) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `❌ **Failed to schedule counselling session**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}\n\n💡 Double-check your date and time format, then try again.`,
+					},
+				],
+			};
 		}
-	);
+	}
+);
 	
 	// Recommend available appointment times
 	server.tool(
