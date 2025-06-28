@@ -475,7 +475,7 @@ server.tool(
           `timeMax=${encodeURIComponent(dayEndTime)}&` +
           `singleEvents=true&` +
           `orderBy=startTime`;
-        const checkResult = await makeCalendarApiRequest(checkUrl,env);
+        const checkResult = await makeCalendarApiRequest(checkUrl, env);
         const existingEvents = checkResult.items || [];
 
         // Check if the time slot is available (45 min meeting + 15 min buffer = 60 min total)
@@ -491,108 +491,124 @@ server.tool(
         }
       }
 
-     const appointmentDetails = [
-  `👤 **Client Information:**`,
-  `Name: ${userName}`,
-  `Email: ${userEmail}`,
-  `Phone: ${userPhone}`,
-  ``,
-  `📋 **Appointment Details:**`,
-  `Type: ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting`,
-  `Duration: 45 minutes`,
-];
+      const appointmentDetails = [
+        `👤 **Client Information:**`,
+        `Name: ${userName}`,
+        `Email: ${userEmail}`,
+        `Phone: ${userPhone}`,
+        ``,
+        `📋 **Appointment Details:**`,
+        `Type: ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting`,
+        `Duration: 45 minutes`,
+      ];
 
-if (description) {
-  appointmentDetails.push(``, `📝 **Additional Notes:**`, description);
-}
-appointmentDetails.push(``, `🕐 **Scheduled on:** ${today}`);
+      if (description) {
+        appointmentDetails.push(``, `📝 **Additional Notes:**`, description);
+      }
+      appointmentDetails.push(``, `🕐 **Scheduled on:** ${today}`);
 
-const fullDescription = appointmentDetails.join('\n');
+      const fullDescription = appointmentDetails.join('\n');
 
-const event = {
-  summary: `${summary} - ${userName}`,
-  description: fullDescription,
-  start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
-  end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-  attendees: allAttendees.map(email => ({ email })),
-  reminders: sendReminder ? {
-    useDefault: false,
-    overrides: [
-      { method: 'email', minutes: 24 * 60 },
-      { method: 'popup', minutes: 30 },
-    ],
-  } : undefined,
-};
+      const event = {
+        summary: `${summary} - ${userName}`,
+        description: fullDescription,
+        start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
+        end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
+        attendees: allAttendees.map(email => ({ email })),
+        reminders: sendReminder ? {
+          useDefault: false,
+          overrides: [
+            { method: 'email', minutes: 24 * 60 },
+            { method: 'popup', minutes: 30 },
+          ],
+        } : undefined,
+      };
 
-const result = await makeCalendarApiRequest(
-  "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-  {
-    method: "POST",
-    body: JSON.stringify(event),
+      const result = await makeCalendarApiRequest(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        env,
+        {
+          method: "POST",
+          body: JSON.stringify(event),
+        }
+      );
+
+      // Send appointment confirmation email
+      try {
+        const accessToken = getAccessToken(env);
+        const emailAppointmentDetails = {
+          summary: `${summary} - ${userName}`,
+          date: displayDate,
+          time: `${displayStartTime} - ${displayEndTime}`,
+          userName: userName
+        };
+        
+        await sendAppointmentEmail(
+          { 
+            to: userEmail, 
+            appointmentDetails: emailAppointmentDetails 
+          }, 
+          accessToken
+        );
+      } catch (emailError) {
+        console.error('Failed to send appointment email:', emailError);
+      }
+
+      let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
+      responseText += `👤 **Client:** ${userName}\n`;
+      responseText += `📧 **Email:** ${userEmail}\n`;
+      responseText += `📱 **Phone:** ${userPhone}\n\n`;
+      responseText += `📋 **Event:** ${summary}\n`;
+      responseText += `📅 **Date:** ${displayDate}\n`;
+      responseText += `⏰ **Time:** ${displayStartTime} - ${displayEndTime} (45 minutes)\n`;
+      responseText += `🔗 **Type:** ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting\n`;
+
+      if (description) {
+        responseText += `📝 **Description:** ${description}\n`;
+      }
+
+      if (parsedAttendees.length > 0) {
+        responseText += `👥 **Additional Attendees:** ${parsedAttendees.join(', ')}\n`;
+      }
+
+      if (result.htmlLink) {
+        responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
+      }
+
+      if (sendReminder) {
+        responseText += `\n\n📨 **Reminders:** Email reminder 1 day before, popup 30 minutes before`;
+      }
+
+      responseText += `\n\n🎉 All set! Your appointment has been added to your calendar and all attendees have been invited.`;
+      responseText += `\n📧 **Confirmation email sent to:** ${userEmail}`;
+
+      if (requireConfirmation) {
+        responseText += `\n\n⚠️ **Confirmation Required:** Please confirm your attendance by replying to the calendar invitation.`;
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: responseText,
+          },
+        ],
+      };
+
+    } catch (error) {
+      console.error('Error scheduling appointment:', error);
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ **Failed to schedule appointment**\n\nError: ${error.message}\n\nPlease check your input and try again. If the problem persists, contact support.`,
+          },
+        ],
+      };
+    }
   }
 );
-
-// Send appointment confirmation email
-try {
-  const accessToken = getAccessToken(env);
-  const emailAppointmentDetails = {
-    summary: `${summary} - ${userName}`,
-    date: displayDate,
-    time: `${displayStartTime} - ${displayEndTime}`,
-    userName: userName
-  };
-  
-  await sendAppointmentEmail(
-    { 
-      to: userEmail, 
-      appointmentDetails: emailAppointmentDetails 
-    }, 
-    accessToken
-  );
-} catch (emailError) {
-  console.error('Failed to send appointment email:', emailError);
-}
-
-let responseText = `✅ **Appointment scheduled successfully!**\n\n`;
-responseText += `👤 **Client:** ${userName}\n`;
-responseText += `📧 **Email:** ${userEmail}\n`;
-responseText += `📱 **Phone:** ${userPhone}\n\n`;
-responseText += `📋 **Event:** ${summary}\n`;
-responseText += `📅 **Date:** ${displayDate}\n`;
-responseText += `⏰ **Time:** ${displayStartTime} - ${displayEndTime} (45 minutes)\n`;
-responseText += `🔗 **Type:** ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting\n`;
-
-if (description) {
-  responseText += `📝 **Description:** ${description}\n`;
-}
-
-if (parsedAttendees.length > 0) {
-  responseText += `👥 **Additional Attendees:** ${parsedAttendees.join(', ')}\n`;
-}
-
-if (result.htmlLink) {
-  responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
-}
-
-if (sendReminder) {
-  responseText += `\n\n📨 **Reminders:** Email reminder 1 day before, popup 30 minutes before`;
-}
-
-responseText += `\n\n🎉 All set! Your appointment has been added to your calendar and all attendees have been invited.`;
-responseText += `\n📧 **Confirmation email sent to:** ${userEmail}`;
-
-if (requireConfirmation) {
-  responseText += `\n\n⚠️ **Confirmation Required:** Please confirm your attendance by replying to the calendar invitation.`;
-}
-
-return {
-  content: [
-    {
-      type: "text",
-      text: responseText,
-    },
-  ],
-};
 // Cancel Appointment Tool
 server.tool(
 	"cancelAppointment",
