@@ -6,6 +6,8 @@ import type { Props } from "./props";
 import { registerDateTool } from "./tools/date";
 import { setupAppointmentTools } from "./tools/appointment";
 import { registerEmailTools } from "./tools/mail";
+import { CalendarReminderService } from "./calendar-reminder";
+
 // Define the Env type to match wrangler.json bindings
 type Env = { 
   AI: any;
@@ -15,18 +17,35 @@ type Env = {
   OAUTH_KV: KVNamespace;
   MCP_OBJECT: DurableObjectNamespace;
 };
+
 export class MyMCP extends McpAgent<Env, unknown, Props> {
   server = new McpServer({
     name: "MCP server demo using AuthKit",
     version: "1.0.0",
   });
+
+  private reminderService: CalendarReminderService | null = null;
+
   async init() {
     // Register tools directly
     registerDateTool(this.server);
     setupAppointmentTools(this.server, this.env);
     registerEmailTools(this.server);
+
+    // Initialize and start the calendar reminder service
+    this.reminderService = new CalendarReminderService(this.env);
+    await this.reminderService.startReminderAutomation();
+  }
+
+  // Clean up when the server shuts down
+  async cleanup() {
+    if (this.reminderService) {
+      await this.reminderService.cleanup();
+      this.reminderService = null;
+    }
   }
 }
+
 export default new OAuthProvider({
   apiRoute: "/sse",
   apiHandler: MyMCP.mount("/sse") as any,
