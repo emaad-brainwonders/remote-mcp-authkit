@@ -1,10 +1,9 @@
 // mail.ts
 import { z } from "zod";
-//import { getGoogleAccessToken } from "../env"; // Import env helper
 
 // Email configuration
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
-const ACCESS_TOKEN = "ya29.a0AS3H6NwGvrRXJ1jNlGvt8ytji4LyB8fgMftHpy-kVhDq1AzD0WLKX50g89FlFTDEcEpmbnn3BZJlv84ezw8iIgOcry-_nriB1oJvr1E5K4iJZnQGJvW6o8bIGRuqRPv46itwhcECge2oVjARmi6XjCbbSk6MA4teRajOashRaCgYKAW0SARQSFQHGX2MiVPm_M1TfQZFFe923_pu7lQ0175";
+
 // Simple email template
 const EMAIL_TEMPLATE = {
   subject: "Appointment Scheduled",
@@ -38,7 +37,7 @@ interface SendAppointmentEmailParams {
 }
 
 // Helper function to send email via Gmail API
-async function sendGmailEmail(to: string, subject: string, body: string): Promise<any> {
+async function sendGmailEmail(to: string, subject: string, body: string, accessToken: string): Promise<any> {
   const email = [
     `To: ${to}`,
     `Subject: ${subject}`,
@@ -52,7 +51,7 @@ async function sendGmailEmail(to: string, subject: string, body: string): Promis
   const response = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${ACCESS_TOKEN}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -69,7 +68,7 @@ async function sendGmailEmail(to: string, subject: string, body: string): Promis
 }
 
 // Export the sendAppointmentEmail function
-export async function sendAppointmentEmail({ to, appointmentDetails }: SendAppointmentEmailParams) {
+export async function sendAppointmentEmail({ to, appointmentDetails }: SendAppointmentEmailParams, accessToken: string) {
   const subject = EMAIL_TEMPLATE.subject;
   const body = EMAIL_TEMPLATE.body(
     appointmentDetails.userName,
@@ -78,7 +77,7 @@ export async function sendAppointmentEmail({ to, appointmentDetails }: SendAppoi
     appointmentDetails.time
   );
 
-  const result = await sendGmailEmail(to, subject, body);
+  const result = await sendGmailEmail(to, subject, body, accessToken);
   return { result, subject };
 }
 
@@ -98,12 +97,19 @@ export function registerEmailTools(server: any) {
     },
     async ({ to, appointmentDetails }: SendAppointmentEmailParams) => {
       try {
-        const { result } = await sendAppointmentEmail({ to, appointmentDetails });
+        // Access the environment variable from the server context
+        const accessToken = server.env?.GOOGLE_ACCESS_TOKEN;
+        
+        if (!accessToken) {
+          throw new Error("Google access token not configured");
+        }
+
+        const { result } = await sendAppointmentEmail({ to, appointmentDetails }, accessToken);
 
         return {
           content: [{
             type: "text",
-            text: `Email sent to ${to}`
+            text: `Email sent successfully to ${to}`
           }]
         };
 
