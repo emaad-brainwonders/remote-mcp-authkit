@@ -1,5 +1,5 @@
-// mail.ts
 import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Email configuration
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
@@ -160,7 +160,7 @@ export async function sendReminderEmail({ to, appointmentDetails, reminderType, 
 }
 
 // MCP Server tools registration
-export function registerEmailTools(server: any) {
+export function registerEmailTools(server: McpServer) {
   // Original appointment email tool
   server.tool(
     "sendAppointmentEmail",
@@ -174,7 +174,7 @@ export function registerEmailTools(server: any) {
         userName: z.string().describe("Client name"),
       }).describe("Appointment details for the email"),
     },
-    async ({ to, appointmentDetails }: SendAppointmentEmailParams) => {
+    async ({ to, appointmentDetails }: SendAppointmentEmailParams, { server }: { server: any }) => {
       try {
         // Access the environment variable from the server context
         const accessToken = server.env?.GOOGLE_ACCESS_TOKEN;
@@ -216,7 +216,7 @@ export function registerEmailTools(server: any) {
       reminderType: z.enum(['advance', 'urgent']).describe("Type of reminder: 'advance' for 1 day/1 hour, 'urgent' for 30 minutes"),
       timeText: z.string().describe("Human readable time text like 'in 1 hour', 'in 30 minutes'")
     },
-    async ({ to, appointmentDetails, reminderType, timeText }: SendReminderEmailParams) => {
+    async ({ to, appointmentDetails, reminderType, timeText }: SendReminderEmailParams, { server }: { server: any }) => {
       try {
         const accessToken = server.env?.GOOGLE_ACCESS_TOKEN;
         
