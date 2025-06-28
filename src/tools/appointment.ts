@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { sendAppointmentEmail } from "./mail"; // Import the email function
+import { sendAppointmentEmail } from "./mail";  
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Function to get access token from environment
@@ -145,7 +145,7 @@ function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: st
   const startTime = new Date(meetingStart + '+05:30').getTime();
   const endTime = new Date(meetingEnd + '+05:30').getTime();
   
-  // Add buffer AFTER the meeting end time (always 15 minutes regardless of parameter)
+  // Add buffer AFTER the meeting end time 
   const endTimeWithBuffer = endTime + (15 * 60 * 1000); // Fixed 15-minute buffer
   
   for (const event of events) {
@@ -210,7 +210,6 @@ function parseAttendeesInput(attendees: any): string[] {
 }
 
 // Helper: Make API request with better error handling
-// Updated to accept env parameter
 async function makeCalendarApiRequest(url: string, env: any, options: RequestInit = {}): Promise<any> {
 	try {
 		const token = getAccessToken(env);
@@ -851,7 +850,7 @@ server.tool(
 	}
 );
 
-// Enhanced Reschedule Appointment Tool (uses cancel and schedule tools)
+// Reschedule Appointment Tool (uses cancel and schedule tools)
 server.tool(
 	"rescheduleAppointment",
 	"Reschedule an existing appointment to a new date and time by canceling the old one and creating a new one",
@@ -919,7 +918,7 @@ server.tool(
 				};
 			}
 
-			// Step 2: Find the appointment to reschedule
+			// Find the appointment to reschedule
 			let events = [];
 			let searchTimeWindow = "";
 
@@ -964,7 +963,7 @@ server.tool(
 				events = result.items || [];
 			}
 
-			// Step 3: Filter events based on search criteria
+			//Filter events based on search criteria
 			const matchingEvents = events.filter((event: any) => {
 				// Skip cancelled or deleted events
 				if (event.status === 'cancelled') return false;
@@ -1066,7 +1065,7 @@ server.tool(
 				};
 			}
 
-			// Step 4: Get the appointment to reschedule
+			//Get the appointment to reschedule
 			const originalEvent = matchingEvents[0];
 			const originalStart = originalEvent.start?.dateTime || originalEvent.start?.date;
 			const originalStartDate = originalStart ? new Date(originalStart) : null;
@@ -1096,7 +1095,7 @@ server.tool(
 				});
 			}
 
-			// Step 5: Extract user information from original event
+			//Extract user information from original event
 			let extractedUserName = userName;
 			let extractedUserEmail = userEmail;
 			let extractedUserPhone = userPhone;
@@ -1151,7 +1150,7 @@ server.tool(
 				}
 			}
 
-			// Step 6: Check availability for new time slot
+			//  Check availability for new time slot
 			if (checkAvailability) {
 				const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
 				const newStartDateObj = new Date(`${newStartDateTime}+05:30`);
@@ -1215,7 +1214,7 @@ server.tool(
 				}
 			}
 
-			// Step 7: Prepare new appointment data
+			// Prepare new appointment data
 			const finalUserName = extractedUserName || 'Unknown User';
 			const finalUserEmail = extractedUserEmail;
 			const finalUserPhone = extractedUserPhone || 'Not provided';
@@ -1231,7 +1230,7 @@ server.tool(
 				};
 			}
 
-			// Step 8: Create new appointment first (safer approach)
+			//Create new appointment first (safer approach)
 			const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
 			const newStartDateObj = new Date(`${newStartDateTime}+05:30`);
 			const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
@@ -1298,7 +1297,7 @@ server.tool(
 				}
 			);
 
-			// Step 9: Cancel original appointment only after new one is created successfully
+			// Cancel original appointment only after new one is created successfully
 			try {
 				const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`;
 				await makeCalendarApiRequest(cancelUrl, env, { method: "DELETE" });
@@ -1315,7 +1314,7 @@ server.tool(
 				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
 
-			// Step 10: Build success response
+			//Build success response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
 			const displayNewStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
@@ -1393,9 +1392,9 @@ server.tool(
 		}
 	}
 );
-// Get User Appointments Tool
 
-// Your getUserAppointments tool (this is the last tool in your function)
+
+// Your getUserAppointments tool 
 server.tool(
     "getUserAppointments",
     "Get upcoming appointments for a user by name, email, or phone",
@@ -1447,4 +1446,4 @@ server.tool(
     }
 );
 
-} // <-- ADD THIS CLOSING BRACE TO CLOSE THE setupAppointmentTools FUNCTION
+} 
