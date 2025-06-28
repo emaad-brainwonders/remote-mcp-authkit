@@ -2,16 +2,20 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AuthkitHandler } from "./authkit-handler";
-//import { setEnv } from "./env"; // Import the setEnv function
 import type { Props } from "./props";
 import { registerDateTool } from "./tools/date";
 import { registerAppointmentTools } from "./tools/appointment";
+import { registerEmailTools } from "./tools/mail";
 
-/*type Env = { 
-  AI?: any;
-  GOOGLE_ACCESS_TOKEN?: string;
-  // Add other environment variables as needed
-};*/
+// Define the Env type to match wrangler.json bindings
+type Env = { 
+  AI: any;
+  GOOGLE_ACCESS_TOKEN: string;
+  WORKOS_CLIENT_ID: string;
+  WORKOS_CLIENT_SECRET: string;
+  OAUTH_KV: KVNamespace;
+  MCP_OBJECT: DurableObjectNamespace;
+};
 
 export class MyMCP extends McpAgent<Env, unknown, Props> {
   server = new McpServer({
@@ -20,12 +24,10 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
   });
 
   async init() {
-    // Set the environment variables globally at initialization
-   
-    
     // Register tools directly
     registerDateTool(this.server);
     registerAppointmentTools(this.server);
+    registerEmailTools(this.server);
   }
 }
 
