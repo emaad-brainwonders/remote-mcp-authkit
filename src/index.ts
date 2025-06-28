@@ -29,7 +29,9 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
     registerDateTool(this.server);
     setupAppointmentTools(this.server, this.env);
     registerEmailTools(this.server);
-    initializeReminderService(this.server, this.env);
+    
+    // Initialize reminder service (commented out until proper tool calling is implemented)
+    // initializeReminderService(this.server, this.env);
   }
 }
 
