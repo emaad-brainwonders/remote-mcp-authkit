@@ -37,11 +37,9 @@
   "dev": {
     "port": 8788
   },
-  // Non-secret environment variables
   "vars": {
     "WORKOS_CLIENT_ID": "client_01JYK402FD2XQ392316BY5RP1Q"
   },
-  // Secret environment variables (use wrangler secret put)
   "secrets": [
     "WORKOS_CLIENT_SECRET",
     "GOOGLE_ACCESS_TOKEN"
