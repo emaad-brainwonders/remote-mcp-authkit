@@ -259,9 +259,11 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
     if (userPhone && event.description && event.description.includes(userPhone)) found = true;
     return found;
 }
+
+ export function setupAppointmentTools(server: McpServer, env: any) {
 	
 	// Recommend available appointment times
-	server.tool(
+	 server.tool(
   "recommendAppointmentTimes",
   "Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
   {
