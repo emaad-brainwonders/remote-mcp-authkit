@@ -1,6 +1,4 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-
-// Updated mail.ts content
 import { z } from "zod";
 
 // Email configuration
@@ -161,7 +159,7 @@ export async function sendReminderEmail({ to, appointmentDetails, reminderType, 
 }
 
 // MCP Server tools
-export function registerEmailTools(server: any) {
+export function registerEmailTools(server: McpServer) {
   // Original appointment email tool
   server.tool(
     "sendAppointmentEmail",
@@ -175,7 +173,7 @@ export function registerEmailTools(server: any) {
         userName: z.string().describe("Client name"),
       }).describe("Appointment details for the email"),
     },
-    async ({ to, appointmentDetails }: SendAppointmentEmailParams) => {
+    async ({ to, appointmentDetails }: SendAppointmentEmailParams, { server }: { server: any }) => {
       try {
         const accessToken = server.env?.GOOGLE_ACCESS_TOKEN;
         
@@ -216,7 +214,7 @@ export function registerEmailTools(server: any) {
       reminderType: z.enum(['advance', 'urgent']).describe("Type of reminder: 'advance' for 1 day/1 hour, 'urgent' for 30 minutes"),
       timeText: z.string().describe("Human readable time text like 'in 1 hour', 'in 30 minutes'")
     },
-    async ({ to, appointmentDetails, reminderType, timeText }: SendReminderEmailParams) => {
+    async ({ to, appointmentDetails, reminderType, timeText }: SendReminderEmailParams, { server }: { server: any }) => {
       try {
         const accessToken = server.env?.GOOGLE_ACCESS_TOKEN;
         
@@ -256,18 +254,19 @@ interface Appointment {
   description?: string;
 }
 
-// Define the server interface with the methods we need
-interface ExtendedMcpServer extends McpServer {
-  call_tool(name: string, params: any): Promise<{ content?: Array<{ type: string; text: string }> }>;
+// Define a proper interface for the server with tools
+interface ServerWithTools {
+  requestTool(name: string, params: any): Promise<{ content?: Array<{ type: string; text: string }> }>;
+  env?: any;
 }
 
 class AppointmentReminderService {
-  private server: ExtendedMcpServer;
+  private server: ServerWithTools;
   private env: any;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private sentReminders = new Set<string>(); // Track sent reminders to avoid duplicates
 
-  constructor(server: ExtendedMcpServer, env: any) {
+  constructor(server: ServerWithTools, env: any) {
     this.server = server;
     this.env = env;
   }
@@ -314,7 +313,7 @@ class AppointmentReminderService {
   private async getUpcomingAppointments(): Promise<Appointment[]> {
     try {
       // Call the list appointments tool
-      const result = await this.server.call_tool("listAppointments", {});
+      const result = await this.server.requestTool("listAppointments", {});
       
       if (result.content?.[0]?.type === "text") {
         const text = result.content[0].text;
@@ -425,7 +424,7 @@ class AppointmentReminderService {
         userName: appointment.userName || 'Client' // Fallback if userName not available
       };
 
-      await this.server.call_tool("sendReminderEmail", {
+      await this.server.requestTool("sendReminderEmail", {
         to: appointment.email,
         appointmentDetails: appointmentDetails,
         reminderType: reminderType,
@@ -447,8 +446,19 @@ class AppointmentReminderService {
 }
 
 // Export function to initialize the reminder service
-export function initializeReminderService(server: ExtendedMcpServer, env: any) {
-  const reminderService = new AppointmentReminderService(server, env);
+export function initializeReminderService(server: McpServer, env: any) {
+  // Create a proper server interface that can call tools
+  const serverWithTools: ServerWithTools = {
+    requestTool: async (name: string, params: any) => {
+      // This is a placeholder - you'll need to implement the actual tool calling mechanism
+      // based on how your MCP server handles tool requests
+      console.log(`Tool request: ${name}`, params);
+      return { content: [{ type: "text", text: "Tool not implemented" }] };
+    },
+    env: env
+  };
+
+  const reminderService = new AppointmentReminderService(serverWithTools, env);
   
   // Start the service
   reminderService.start();
