@@ -26,7 +26,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
   async init() {
     // Register tools directly
     registerDateTool(this.server);
-    setupAppointmentTools(this.server);
+    setupAppointmentTools(this.server, this.env);
     registerEmailTools(this.server);
   }
 }
