@@ -1378,6 +1378,7 @@ server.tool(
 );
 // Get User Appointments Tool
 
+// Your getUserAppointments tool (this is the last tool in your function)
 server.tool(
     "getUserAppointments",
     "Get upcoming appointments for a user by name, email, or phone",
@@ -1428,3 +1429,5 @@ server.tool(
         }
     }
 );
+
+} // <-- ADD THIS CLOSING BRACE TO CLOSE THE setupAppointmentTools FUNCTION
