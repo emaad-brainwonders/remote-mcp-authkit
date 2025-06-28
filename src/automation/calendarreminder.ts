@@ -26,6 +26,16 @@ interface ReminderStatus {
   scheduledTime: number;
 }
 
+interface GoogleCalendarResponse {
+  items?: CalendarEvent[];
+}
+
+interface GmailSendResponse {
+  id: string;
+  threadId: string;
+  labelIds: string[];
+}
+
 type Env = {
   AI: any;
   GOOGLE_ACCESS_TOKEN: string;
@@ -36,7 +46,7 @@ type Env = {
 };
 
 export class CalendarReminderService {
-  private reminderInterval: NodeJS.Timeout | null = null;
+  private reminderInterval: number | null = null;
   private readonly REMINDER_MINUTES = 30;
   private readonly CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 
@@ -55,7 +65,7 @@ export class CalendarReminderService {
       } catch (error) {
         console.error("Error in reminder automation:", error);
       }
-    }, this.CHECK_INTERVAL_MS);
+    }, this.CHECK_INTERVAL_MS) as unknown as number;
   }
 
   private async checkForUpcomingMeetings() {
@@ -100,7 +110,7 @@ export class CalendarReminderService {
       throw new Error(`Google Calendar API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as GoogleCalendarResponse;
     return data.items || [];
   }
 
@@ -237,7 +247,7 @@ Calendar Reminder System
         throw new Error(`Gmail API error: ${response.status} - ${error}`);
       }
 
-      const result = await response.json();
+      const result = await response.json() as GmailSendResponse;
       console.log(`Email reminder sent successfully to ${emailPayload.to}`, { messageId: result.id });
       return result;
 
