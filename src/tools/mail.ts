@@ -147,11 +147,13 @@ export async function sendReminderEmail({ to, appointmentDetails, reminderType, 
   
   const subject = reminderType === 'urgent' 
     ? template.subject(appointmentDetails.summary)
-    : template.subject(appointmentDetails.summary, timeText);
+    : (template.subject as (summary: string, timeText: string) => string)(appointmentDetails.summary, timeText);
     
   const body = reminderType === 'urgent'
     ? template.body(appointmentDetails.userName, appointmentDetails.summary, appointmentDetails.date, appointmentDetails.time)
-    : template.body(appointmentDetails.userName, appointmentDetails.summary, appointmentDetails.date, appointmentDetails.time, timeText);
+    : (template.body as (userName: string, summary: string, date: string, time: string, timeText: string) => string)(
+        appointmentDetails.userName, appointmentDetails.summary, appointmentDetails.date, appointmentDetails.time, timeText
+      );
 
   const result = await sendGmailEmail(to, subject, body, accessToken);
   return { result, subject };
