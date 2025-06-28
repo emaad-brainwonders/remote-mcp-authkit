@@ -1,4 +1,6 @@
-// mail.ts
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+// Updated mail.ts content
 import { z } from "zod";
 
 // Email configuration
@@ -6,7 +8,6 @@ const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
 
 // Email templates
 const EMAIL_TEMPLATES = {
-  // Original appointment scheduled email
   appointment: {
     subject: "Appointment Scheduled",
     body: (userName: string, summary: string, date: string, time: string) => 
@@ -21,7 +22,7 @@ Email: sales@company.com
 Thank you.`
   },
   
-  // Reminder for 1 day and 1 hour before (detailed format)
+  // Reminder for 1 day and 1 hour before
   reminderAdvance: {
     subject: (summary: string, timeText: string) => `Upcoming Appointment Reminder - ${summary} (${timeText})`,
     body: (userName: string, summary: string, date: string, time: string, timeText: string) =>
@@ -50,7 +51,7 @@ Best regards,
 Appointment Management Team`
   },
 
-  // Reminder for 30 minutes before (urgent format)
+  // Reminder for 30 minutes before  
   reminderUrgent: {
     subject: (summary: string) => `⏰ Your appointment starts in 30 minutes - ${summary}`,
     body: (userName: string, summary: string, date: string, time: string) =>
@@ -127,7 +128,7 @@ async function sendGmailEmail(to: string, subject: string, body: string, accessT
   return response.json();
 }
 
-// Export the sendAppointmentEmail function (original)
+// Export the sendAppointmentEmail function
 export async function sendAppointmentEmail({ to, appointmentDetails }: SendAppointmentEmailParams, accessToken: string) {
   const subject = EMAIL_TEMPLATES.appointment.subject;
   const body = EMAIL_TEMPLATES.appointment.body(
@@ -141,7 +142,7 @@ export async function sendAppointmentEmail({ to, appointmentDetails }: SendAppoi
   return { result, subject };
 }
 
-// Export the sendReminderEmail function (new)
+// Export the sendReminderEmail function
 export async function sendReminderEmail({ to, appointmentDetails, reminderType, timeText }: SendReminderEmailParams, accessToken: string) {
   const template = reminderType === 'urgent' ? EMAIL_TEMPLATES.reminderUrgent : EMAIL_TEMPLATES.reminderAdvance;
   
@@ -159,7 +160,7 @@ export async function sendReminderEmail({ to, appointmentDetails, reminderType, 
   return { result, subject };
 }
 
-// MCP Server tools registration
+// MCP Server tools
 export function registerEmailTools(server: any) {
   // Original appointment email tool
   server.tool(
@@ -176,7 +177,6 @@ export function registerEmailTools(server: any) {
     },
     async ({ to, appointmentDetails }: SendAppointmentEmailParams) => {
       try {
-        // Access the environment variable from the server context
         const accessToken = server.env?.GOOGLE_ACCESS_TOKEN;
         
         if (!accessToken) {
@@ -241,4 +241,218 @@ export function registerEmailTools(server: any) {
       }
     }
   );
+}
+
+// Reminder intervals in minutes
+const REMINDER_INTERVALS = [30, 60, 1440]; // 30 min, 1 hour, 1 day
+
+interface Appointment {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  email: string;
+  userName?: string;
+  description?: string;
+}
+
+// Define the server interface with the methods we need
+interface ExtendedMcpServer extends McpServer {
+  call_tool(name: string, params: any): Promise<{ content?: Array<{ type: string; text: string }> }>;
+}
+
+class AppointmentReminderService {
+  private server: ExtendedMcpServer;
+  private env: any;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private sentReminders = new Set<string>(); // Track sent reminders to avoid duplicates
+
+  constructor(server: ExtendedMcpServer, env: any) {
+    this.server = server;
+    this.env = env;
+  }
+
+  // Start the reminder service
+  start() {
+    if (this.intervalId) {
+      console.log("Reminder service already running");
+      return;
+    }
+
+    console.log("Starting appointment reminder service...");
+    
+    // Check every 2 minutes
+    this.intervalId = setInterval(() => {
+      this.checkAndSendReminders().catch(console.error);
+    }, 2 * 60 * 1000);
+
+    // Run initial check
+    this.checkAndSendReminders().catch(console.error);
+  }
+
+  // Stop the reminder service
+  stop() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+      console.log("Appointment reminder service stopped");
+    }
+  }
+
+  private async checkAndSendReminders() {
+    try {
+      const appointments = await this.getUpcomingAppointments();
+      
+      for (const appointment of appointments) {
+        await this.processAppointmentReminders(appointment);
+      }
+    } catch (error) {
+      console.error("Error checking reminders:", error);
+    }
+  }
+
+  private async getUpcomingAppointments(): Promise<Appointment[]> {
+    try {
+      // Call the list appointments tool
+      const result = await this.server.call_tool("listAppointments", {});
+      
+      if (result.content?.[0]?.type === "text") {
+        const text = result.content[0].text;
+        
+        // Parse appointments from the response
+        if (text.includes("No appointments found")) {
+          return [];
+        }
+
+        // Extract appointments from the formatted text
+        const appointments: Appointment[] = [];
+        const lines = text.split('\n');
+        
+        let currentAppointment: Partial<Appointment> = {};
+        
+        for (const line of lines) {
+          if (line.startsWith('ID: ')) {
+            if (currentAppointment.id) {
+              appointments.push(currentAppointment as Appointment);
+            }
+            currentAppointment = { id: line.replace('ID: ', '').trim() };
+          } else if (line.startsWith('Title: ')) {
+            currentAppointment.title = line.replace('Title: ', '').trim();
+          } else if (line.startsWith('Date: ')) {
+            currentAppointment.date = line.replace('Date: ', '').trim();
+          } else if (line.startsWith('Time: ')) {
+            currentAppointment.time = line.replace('Time: ', '').trim();
+          } else if (line.startsWith('Email: ')) {
+            currentAppointment.email = line.replace('Email: ', '').trim();
+          } else if (line.startsWith('User Name: ') || line.startsWith('Name: ')) {
+            currentAppointment.userName = line.replace(/^(User Name: |Name: )/, '').trim();
+          } else if (line.startsWith('Description: ')) {
+            currentAppointment.description = line.replace('Description: ', '').trim();
+          }
+        }
+        
+        // Add the last appointment
+        if (currentAppointment.id) {
+          appointments.push(currentAppointment as Appointment);
+        }
+        
+        return appointments;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+      return [];
+    }
+  }
+
+  private async processAppointmentReminders(appointment: Appointment) {
+    const appointmentDateTime = this.parseAppointmentDateTime(appointment.date, appointment.time);
+    if (!appointmentDateTime) return;
+
+    const now = new Date();
+    const minutesUntilAppointment = Math.floor((appointmentDateTime.getTime() - now.getTime()) / (1000 * 60));
+
+    for (const reminderMinutes of REMINDER_INTERVALS) {
+      // Check if we should send this reminder (within 1 minute window)
+      if (Math.abs(minutesUntilAppointment - reminderMinutes) <= 1) {
+        const reminderKey = `${appointment.id}-${reminderMinutes}`;
+        
+        if (!this.sentReminders.has(reminderKey)) {
+          await this.sendReminderEmail(appointment, reminderMinutes);
+          this.sentReminders.add(reminderKey);
+        }
+      }
+    }
+
+    // Clean up old reminders for appointments that have passed
+    if (minutesUntilAppointment < -60) {
+      REMINDER_INTERVALS.forEach(interval => {
+        this.sentReminders.delete(`${appointment.id}-${interval}`);
+      });
+    }
+  }
+
+  private parseAppointmentDateTime(date: string, time: string): Date | null {
+    try {
+      // Assuming date format is YYYY-MM-DD and time is HH:MM
+      const dateTimeString = `${date}T${time}:00`;
+      const appointmentDate = new Date(dateTimeString);
+      
+      if (isNaN(appointmentDate.getTime())) {
+        console.error(`Invalid date/time format: ${date} ${time}`);
+        return null;
+      }
+      
+      return appointmentDate;
+    } catch (error) {
+      console.error("Error parsing appointment date/time:", error);
+      return null;
+    }
+  }
+
+  private async sendReminderEmail(appointment: Appointment, reminderMinutes: number) {
+    try {
+      const timeText = this.getReminderTimeText(reminderMinutes);
+      
+      // Determine reminder type: 30 minutes = urgent, others = advance
+      const reminderType = reminderMinutes === 30 ? 'urgent' : 'advance';
+      
+      const appointmentDetails = {
+        summary: appointment.title,
+        date: appointment.date,
+        time: appointment.time,
+        userName: appointment.userName || 'Client' // Fallback if userName not available
+      };
+
+      await this.server.call_tool("sendReminderEmail", {
+        to: appointment.email,
+        appointmentDetails: appointmentDetails,
+        reminderType: reminderType,
+        timeText: timeText
+      });
+
+      console.log(`${reminderType} reminder sent for appointment ${appointment.id} (${timeText})`);
+    } catch (error) {
+      console.error(`Error sending reminder for appointment ${appointment.id}:`, error);
+    }
+  }
+
+  private getReminderTimeText(minutes: number): string {
+    if (minutes === 30) return "in 30 minutes";
+    if (minutes === 60) return "in 1 hour";
+    if (minutes === 1440) return "in 1 day";
+    return `in ${minutes} minutes`;
+  }
+}
+
+// Export function to initialize the reminder service
+export function initializeReminderService(server: ExtendedMcpServer, env: any) {
+  const reminderService = new AppointmentReminderService(server, env);
+  
+  // Start the service
+  reminderService.start();
+  
+  // Return the service instance in case you need to stop it later
+  return reminderService;
 }
