@@ -6,6 +6,7 @@ import type { Props } from "./props";
 import { registerDateTool } from "./tools/date";
 import { setupAppointmentTools } from "./tools/appointment";
 import { registerEmailTools } from "./tools/mail";
+import { initializeReminderService } from "../tools/appointment-reminder";
 
 // Define the Env type to match wrangler.json bindings
 type Env = { 
@@ -28,6 +29,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
     registerDateTool(this.server);
     setupAppointmentTools(this.server, this.env);
     registerEmailTools(this.server);
+    initializeReminderService(this.server, this.env);
   }
 }
 
