@@ -46,7 +46,7 @@ type Env = {
 };
 
 export class CalendarReminderService {
-  private reminderInterval: NodeJS.Timeout | null = null;
+  private reminderInterval: number | null = null;
   private readonly REMINDER_MINUTES = 30;
   private readonly CHECK_INTERVAL_MS = 2 * 60 * 1000; // Check every 2 minutes for better responsiveness
   private isRunning = false;
@@ -78,7 +78,7 @@ export class CalendarReminderService {
       } catch (error) {
         console.error("Error in reminder automation:", error);
       }
-    }, this.CHECK_INTERVAL_MS);
+    }, this.CHECK_INTERVAL_MS) as unknown as number;
   }
 
   private async checkForUpcomingMeetings() {
