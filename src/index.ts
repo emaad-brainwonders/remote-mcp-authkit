@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AuthkitHandler } from "./authkit-handler";
 import type { Props } from "./props";
 import { registerDateTool } from "./tools/date";
-import { registerAppointmentTools } from "./tools/appointment";
+import { setupAppointmentTools } from "./tools/appointment";
 import { registerEmailTools } from "./tools/mail";
 
 // Define the Env type to match wrangler.json bindings
