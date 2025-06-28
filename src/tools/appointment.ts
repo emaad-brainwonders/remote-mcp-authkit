@@ -1,17 +1,15 @@
 import { z } from "zod";
 import { sendAppointmentEmail } from "./mail"; // Import the email function
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-//import { getEnv, getGoogleAccessToken } from "../env";
 
-const HARDCODED_GOOGLE_ACCESS_TOKEN = "ya29.a0AS3H6NwGvrRXJ1jNlGvt8ytji4LyB8fgMftHpy-kVhDq1AzD0WLKX50g89FlFTDEcEpmbnn3BZJlv84ezw8iIgOcry-_nriB1oJvr1E5K4iJZnQGJvW6o8bIGRuqRPv46itwhcECge2oVjARmi6XjCbbSk6MA4teRajOashRaCgYKAW0SARQSFQHGX2MiVPm_M1TfQZFFe923_pu7lQ0175";
-
-
-/*const getAccessToken = (): string => {
-	if (!HARDCODED_GOOGLE_ACCESS_TOKEN) {
-		throw new Error("Google OAuth access token is required.");
+// Function to get access token from environment
+function getAccessToken(env: any): string {
+	const token = env.GOOGLE_ACCESS_TOKEN;
+	if (!token) {
+		throw new Error("Google OAuth access token is required. Please set GOOGLE_ACCESS_TOKEN in your Wrangler secrets.");
 	}
-	return HARDCODED_GOOGLE_ACCESS_TOKEN;
-};*/
+	return token;
+}
 
 // Helper: Format date to YYYY-MM-DD   
 function formatDateToString(date: Date): string {
@@ -175,8 +173,6 @@ function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: st
   return true;
 }
 
-
-
 // Helper: Parse attendees from various input formats
 function parseAttendeesInput(attendees: any): string[] {
 	if (!attendees) return [];
@@ -214,9 +210,10 @@ function parseAttendeesInput(attendees: any): string[] {
 }
 
 // Helper: Make API request with better error handling
-async function makeCalendarApiRequest(url: string, options: RequestInit = {}): Promise<any> {
+// Updated to accept env parameter
+async function makeCalendarApiRequest(url: string, env: any, options: RequestInit = {}): Promise<any> {
 	try {
-		const token = HARDCODED_GOOGLE_ACCESS_TOKEN ;
+		const token = getAccessToken(env);
 		
 		const response = await fetch(url, {
 			...options,
@@ -251,6 +248,7 @@ async function makeCalendarApiRequest(url: string, options: RequestInit = {}): P
 		throw new Error(`Unexpected error: ${String(error)}`);
 	}
 }
+
 function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { userName?: string, userEmail?: string, userPhone?: string }) {
     let found = false;
     // Match by summary (name)
@@ -261,98 +259,6 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
     if (userPhone && event.description && event.description.includes(userPhone)) found = true;
     return found;
 }
-
-export function registerAppointmentTools(server: McpServer) {
-	// Get schedule for a specific date
-	server.tool(
-		"getSchedule",
-		"Get the schedule for a specific date from Google Calendar. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
-		{
-			date: z.string().min(1).describe("Date in YYYY-MM-DD format or relative expression like 'today', 'tomorrow', '10 days from now', 'next week', etc."),
-		},
-		async ({ date }) => {
-			try {
-				// Parse the date input to handle relative expressions
-				const parsedDate = parseRelativeDate(date);
-				const displayDate = formatDateForDisplay(parsedDate);
-				
-				// Set time bounds for the day in Asia/Kolkata timezone
-				const startDateTime = `${parsedDate}T00:00:00+05:30`;
-				const endDateTime = `${parsedDate}T23:59:59+05:30`;
-				
-				const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-					`timeMin=${encodeURIComponent(startDateTime)}&` +
-					`timeMax=${encodeURIComponent(endDateTime)}&` +
-					`singleEvents=true&` +
-					`orderBy=startTime`;
-				
-				const result = await makeCalendarApiRequest(url);
-				const events = result.items || [];
-				
-				if (events.length === 0) {
-					return {
-						content: [
-							{
-								type: "text",
-								text: `🗓️ You have a completely free day on ${displayDate}! No appointments scheduled.`,
-							},
-						],
-					};
-				}
-				
-				const scheduleText = events
-					.map((event: any, index: number) => {
-						const start = event.start?.dateTime || event.start?.date;
-						const end = event.end?.dateTime || event.end?.date;
-						
-						let timeString = 'All day';
-						if (start && start.includes('T')) {
-							const startTime = new Date(start).toLocaleTimeString('en-IN', { 
-								hour: '2-digit', 
-								minute: '2-digit',
-								timeZone: 'Asia/Kolkata'
-							});
-							
-							if (end && end.includes('T')) {
-								const endTime = new Date(end).toLocaleTimeString('en-IN', { 
-									hour: '2-digit', 
-									minute: '2-digit',
-									timeZone: 'Asia/Kolkata'
-								});
-								timeString = `${startTime} - ${endTime}`;
-							} else {
-								timeString = startTime;
-							}
-						}
-						
-						const eventTitle = event.summary || 'Untitled Event';
-						return `${index + 1}. **${eventTitle}** - ${timeString}`;
-					})
-					.join('\n');
-				
-				const eventCount = events.length;
-				const pluralText = eventCount === 1 ? 'appointment' : 'appointments';
-				
-				return {
-					content: [
-						{
-							type: "text",
-							text: `📅 **Your schedule for ${displayDate}**\n\nYou have ${eventCount} ${pluralText} planned:\n\n${scheduleText}`,
-						},
-					],
-				};
-			} catch (error) {
-				return {
-					content: [
-						{
-							type: "text",
-							text: `❌ I couldn't retrieve your schedule. ${error instanceof Error ? error.message : 'Please try again later.'}`,
-						},
-					],
-				};
-			}
-		}
-	);
 	
 	// Recommend available appointment times
 	server.tool(
