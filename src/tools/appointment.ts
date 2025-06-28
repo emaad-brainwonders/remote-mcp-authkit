@@ -602,7 +602,7 @@ server.tool(
         content: [
           {
             type: "text",
-            text: `❌ **Failed to schedule appointment**\n\nError: ${error.message}\n\nPlease check your input and try again. If the problem persists, contact support.`,
+            text: `❌ **Failed to schedule appointment**\n\nError: ${error instanceof Error ? error.message : String(error)}\n\nPlease check your input and try again. If the problem persists, contact support.`,
           },
         ],
       };
@@ -658,7 +658,7 @@ server.tool(
 					`timeMax=${encodeURIComponent(endDateTime)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
-				const searchResult = await makeCalendarApiRequest(searchUrl);
+				const searchResult = await makeCalendarApiRequest(searchUrl, env);
 				events = searchResult.items || [];
 			} else {
 				// Search upcoming 30 days
@@ -671,7 +671,7 @@ server.tool(
 					`timeMax=${encodeURIComponent(future)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
-				const result = await makeCalendarApiRequest(url);
+				const result = await makeCalendarApiRequest(url, env);
 				events = result.items || [];
 			}
 
@@ -807,7 +807,7 @@ server.tool(
 
 			// Perform the cancellation
 			const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventToCancel.id}`;
-			await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
+			await makeCalendarApiRequest(cancelUrl, env, { method: "DELETE" });
 
 			// Send cancellation email if we have the client's email
 
@@ -944,7 +944,7 @@ server.tool(
 					`timeMax=${encodeURIComponent(endDateTime)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
-				const searchResult = await makeCalendarApiRequest(searchUrl);
+				const searchResult = await makeCalendarApiRequest(searchUrl, env);
 				events = searchResult.items || [];
 			} else {
 				// Search upcoming appointments (next 30 days)
@@ -960,7 +960,7 @@ server.tool(
 					`timeMax=${encodeURIComponent(timeMax)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
-				const result = await makeCalendarApiRequest(url,env);
+				const result = await makeCalendarApiRequest(url, env);
 				events = result.items || [];
 			}
 
@@ -1167,7 +1167,7 @@ server.tool(
 					`singleEvents=true&` +
 					`orderBy=startTime`;
 				
-				const checkResult = await makeCalendarApiRequest(checkUrl);
+				const checkResult = await makeCalendarApiRequest(checkUrl, env);
 				const existingEvents = (checkResult.items || []).filter((event: any) => 
 					event.id !== originalEvent.id && event.status !== 'cancelled'
 				);
@@ -1291,6 +1291,7 @@ server.tool(
 			// Create new appointment
 			const createResult = await makeCalendarApiRequest(
 				"https://www.googleapis.com/calendar/v3/calendars/primary/events",
+				env,
 				{
 					method: "POST",
 					body: JSON.stringify(newEvent),
@@ -1300,12 +1301,12 @@ server.tool(
 			// Step 9: Cancel original appointment only after new one is created successfully
 			try {
 				const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`;
-				await makeCalendarApiRequest(cancelUrl, { method: "DELETE" });
+				await makeCalendarApiRequest(cancelUrl, env, { method: "DELETE" });
 			} catch (cancelError) {
 				// If cancellation fails, try to delete the new appointment to maintain consistency
 				try {
 					const deleteNewUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${createResult.id}`;
-					await makeCalendarApiRequest(deleteNewUrl, { method: "DELETE" });
+					await makeCalendarApiRequest(deleteNewUrl, env, { method: "DELETE" });
 				} catch (deleteError) {
 					// Ignore deletion error
 				}
@@ -1410,7 +1411,7 @@ server.tool(
             const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
             const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&timeMax=${encodeURIComponent(future)}&singleEvents=true&orderBy=startTime`;
             
-            const result = await makeCalendarApiRequest(url);
+            const result = await makeCalendarApiRequest(url, env);
             const events = (result.items || []).filter((event: any) => eventMatchesUser(event, { userName, userEmail, userPhone }));
             
             if (events.length === 0) {
