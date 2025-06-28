@@ -6,8 +6,6 @@ import type { Props } from "./props";
 import { registerDateTool } from "./tools/date";
 import { setupAppointmentTools } from "./tools/appointment";
 import { registerEmailTools } from "./tools/mail";
-import { initializeReminderService } from "./tools/ReminderService";
-
 // Define the Env type to match wrangler.json bindings
 type Env = { 
   AI: any;
@@ -17,24 +15,18 @@ type Env = {
   OAUTH_KV: KVNamespace;
   MCP_OBJECT: DurableObjectNamespace;
 };
-
 export class MyMCP extends McpAgent<Env, unknown, Props> {
   server = new McpServer({
     name: "MCP server demo using AuthKit",
     version: "1.0.0",
   });
-
   async init() {
     // Register tools directly
     registerDateTool(this.server);
     setupAppointmentTools(this.server, this.env);
     registerEmailTools(this.server);
-    
-    // Initialize reminder service (commented out until proper tool calling is implemented)
-    // initializeReminderService(this.server, this.env);
   }
 }
-
 export default new OAuthProvider({
   apiRoute: "/sse",
   apiHandler: MyMCP.mount("/sse") as any,
