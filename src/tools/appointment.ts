@@ -1377,6 +1377,7 @@ server.tool(
 	}
 );
 // Get User Appointments Tool
+
 server.tool(
     "getUserAppointments",
     "Get upcoming appointments for a user by name, email, or phone",
@@ -1427,4 +1428,3 @@ server.tool(
         }
     }
 );
-    }
