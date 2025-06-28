@@ -6,7 +6,7 @@ import type { Props } from "./props";
 import { registerDateTool } from "./tools/date";
 import { setupAppointmentTools } from "./tools/appointment";
 import { registerEmailTools } from "./tools/mail";
-import { CalendarReminderService } from "./calendarreminder";
+import { CalendarReminderService } from "./automation/calendarreminder.ts";
 
 // Define the Env type to match wrangler.json bindings
 type Env = { 
