@@ -475,7 +475,7 @@ server.tool(
           `timeMax=${encodeURIComponent(dayEndTime)}&` +
           `singleEvents=true&` +
           `orderBy=startTime`;
-        const checkResult = await makeCalendarApiRequest(checkUrl);
+        const checkResult = await makeCalendarApiRequest(checkUrl,env);
         const existingEvents = checkResult.items || [];
 
         // Check if the time slot is available (45 min meeting + 15 min buffer = 60 min total)
@@ -535,14 +535,9 @@ server.tool(
 
       // Send appointment confirmation email
       try {
-        await sendAppointmentEmail({
-          to: userEmail,
-          appointmentDetails: {
-            summary: `${summary} - ${userName}`,
-            date: displayDate,
-            time: displayStartTime,
-            userName: userName
-          }
+        const accessToken = getAccessToken(env); // Get the access token using your function
+        await sendAppointmentEmail({ to: email, appointmentDetails }, accessToken);
+
         });
       } catch (emailError) {
         console.error('Failed to send appointment email:', emailError);
@@ -951,7 +946,7 @@ server.tool(
 					`timeMax=${encodeURIComponent(timeMax)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
-				const result = await makeCalendarApiRequest(url);
+				const result = await makeCalendarApiRequest(url,env);
 				events = result.items || [];
 			}
 
