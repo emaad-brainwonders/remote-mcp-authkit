@@ -283,7 +283,7 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
         `singleEvents=true&` +
         `orderBy=startTime`;
 
-      const result = await makeCalendarApiRequest(url);
+     const result = await makeCalendarApiRequest(url, env);
       const events = result.items || [];
 
       const recommendations: string[] = [];
