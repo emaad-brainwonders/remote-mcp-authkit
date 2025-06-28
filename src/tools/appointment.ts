@@ -1386,23 +1386,44 @@ server.tool(
         userPhone: z.string().optional().describe("User's phone number (optional)"),
     },
     async ({ userName, userEmail, userPhone }) => {
-        // Fetch all upcoming events (next 30 days)
-        const now = new Date().toISOString();
-        const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&timeMax=${encodeURIComponent(future)}&singleEvents=true&orderBy=startTime`;
-        const result = await makeCalendarApiRequest(url);
-        const events = (result.items || []).filter((event: any) => eventMatchesUser(event, { userName, userEmail, userPhone }));
-        if (events.length === 0) {
-            return { content: [{ type: "text", text: "No upcoming appointments found for the provided information." }] };
+        try {
+            // Fetch all upcoming events (next 30 days)
+            const now = new Date().toISOString();
+            const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+            const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&timeMax=${encodeURIComponent(future)}&singleEvents=true&orderBy=startTime`;
+            
+            const result = await makeCalendarApiRequest(url);
+            const events = (result.items || []).filter((event: any) => eventMatchesUser(event, { userName, userEmail, userPhone }));
+            
+            if (events.length === 0) {
+                return { 
+                    content: [{ 
+                        type: "text", 
+                        text: "No upcoming appointments found for the provided information." 
+                    }] 
+                };
+            }
+            
+            const list = events.map((event: any) => {
+                const date = event.start?.dateTime
+                    ? new Date(event.start.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+                    : event.start?.date;
+                return `- ${event.summary || "No Title"} on ${date}`;
+            }).join('\n');
+            
+            return { 
+                content: [{ 
+                    type: "text", 
+                    text: `Your upcoming appointments:\n${list}` 
+                }] 
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: "text",
+                    text: `❌ **Failed to retrieve appointments**\n\n${error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}`
+                }]
+            };
         }
-        const list = events.map((event: any) => {
-            const date = event.start?.dateTime
-                ? new Date(event.start.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
-                : event.start?.date;
-            return `- ${event.summary || "No Title"} on ${date}`;
-        }).join('\n');
-        return { content: [{ type: "text", text: `Your upcoming appointments:\n${list}` }] };
     }
 );
-	
-}
