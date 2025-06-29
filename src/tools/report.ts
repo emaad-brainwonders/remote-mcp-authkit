@@ -54,14 +54,19 @@ async function handleGetReport(
   let connection: any = null;
   
   try {
-    // Extract client_identifier from args
-    const clientIdentifier = args.client_identifier as string;
+    // Debug: Log the received args
+    console.log('Received args:', JSON.stringify(args));
+    
+    // Extract client_identifier from args with fallback options
+    const clientIdentifier = args.client_identifier || args.client_name || args.client_id;
+    
+    console.log('Extracted clientIdentifier:', clientIdentifier);
     
     if (!clientIdentifier) {
       return {
         content: [{
           type: 'text',
-          text: 'Error: client_identifier parameter is required'
+          text: `Error: client_identifier parameter is required. Received args: ${JSON.stringify(args)}`
         }]
       };
     }
@@ -78,6 +83,8 @@ async function handleGetReport(
     
     const searchTerm = `%${clientIdentifier}%`;
     const clientId = isNaN(Number(clientIdentifier)) ? -1 : parseInt(clientIdentifier);
+    
+    console.log('Executing query with:', { searchTerm, clientId });
     
     // Use execute method (should work with mysql2/promise)
     const [rows] = await connection.execute(query, [searchTerm, clientId]);
@@ -119,6 +126,7 @@ async function handleGetReport(
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Database error:', error);
     return {
       content: [{
         type: 'text',
