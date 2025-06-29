@@ -5,12 +5,12 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
-// Database configuration
+// Database configuration - using environment variables for Cloudflare Workers
 const DB_CONFIG = {
-  host: process.env.DB_HOST || 'ls-88ff1aa05e7d04e62a925bf4fd2b33f1b050d027.cifqbroovvmr.ap-south-1.rds.amazonaws.com',
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || 'dbadmin',
-  password: process.env.DB_PASS || 'mFyW^(5mVR9SAxzcN((^e1MykGd#$_js',
+  host: 'ls-88ff1aa05e7d04e62a925bf4fd2b33f1b050d027.cifqbroovvmr.ap-south-1.rds.amazonaws.com',
+  port: 3306,
+  user: 'dbadmin',
+  password: 'mFyW^(5mVR9SAxzcN((^e1MykGd#$_js',
   database: 'tmuat'
 };
 
@@ -20,28 +20,17 @@ async function getConnection() {
     const connection = await mysql.createConnection(DB_CONFIG);
     return connection;
   } catch (error) {
-    throw new Error(`Database connection failed: ${error.message}`);
+    throw new Error(`Database connection failed: ${(error as Error).message}`);
   }
 }
 
 // Main function to register the report tools
 export function registerReportTools(server: McpServer, env?: any) {
   
-  // Register the tool in the list tools handler
-  const existingListHandler = server.getRequestHandler(ListToolsRequestSchema);
-  
-  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-    // Get existing tools if handler exists
-    let existingTools = [];
-    if (existingListHandler) {
-      const existingResult = await existingListHandler(request);
-      existingTools = existingResult.tools || [];
-    }
-
-    // Add our report tool
+  // Add list tools handler
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: [
-        ...existingTools,
         {
           name: 'get_report_path',
           description: 'Get report path from database by client name or client ID',
@@ -60,20 +49,12 @@ export function registerReportTools(server: McpServer, env?: any) {
     };
   });
 
-  // Register the tool call handler
-  const existingCallHandler = server.getRequestHandler(CallToolRequestSchema);
-  
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  // Add tool call handler
+  server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     const { name, arguments: args } = request.params;
 
-    // Handle our report tool
     if (name === 'get_report_path') {
       return await handleGetReport(args);
-    }
-
-    // Delegate to existing handler for other tools
-    if (existingCallHandler) {
-      return await existingCallHandler(request);
     }
 
     throw new Error(`Unknown tool: ${name}`);
@@ -96,7 +77,7 @@ async function handleGetReport(args: { client_identifier: string }) {
     const searchTerm = `%${args.client_identifier}%`;
     const clientId = isNaN(Number(args.client_identifier)) ? -1 : parseInt(args.client_identifier);
     
-    const [rows] = await connection.execute(query, [searchTerm, clientId]);
+    const [rows] = await connection.query(query, [searchTerm, clientId]);
     
     if (!Array.isArray(rows) || rows.length === 0) {
       return {
