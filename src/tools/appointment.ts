@@ -258,18 +258,11 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
     if (userPhone && event.description && event.description.includes(userPhone)) found = true;
     return found;
 }
-// Helper function to convert IST to UTC
-function convertISTtoUTC(istDateString: string): string {
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-  return new Date(new Date(istDateString).getTime() - istOffset).toISOString();
-}
-
 
  export function setupAppointmentTools(server: McpServer, env: any) {
 	
-  
-// Add debugging to see what's happening with date parsing
-server.tool(
+	// Recommend available appointment times
+	 server.tool(
   "recommendAppointmentTimes",
   "Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
   {
@@ -278,49 +271,21 @@ server.tool(
   async ({ date }) => {
     try {
       const parsedDate = parseRelativeDate(date);
-      console.log('Original date input:', date);
-      console.log('Parsed date:', parsedDate);
-      
-      // Ensure parsedDate is in YYYY-MM-DD format
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(parsedDate)) {
-        throw new Error(`Invalid date format: ${parsedDate}. Expected YYYY-MM-DD format.`);
-      }
-      
       const displayDate = formatDateForDisplay(parsedDate);
 
-      // Properly convert IST to UTC for API call
-      // Create dates in IST timezone, then convert to UTC
-      const startIST = new Date(`${parsedDate}T00:00:00+05:30`);
-      const endIST = new Date(`${parsedDate}T23:59:59+05:30`);
-      
-      const startUTC = startIST.toISOString();
-      const endUTC = endIST.toISOString();
-      
-      console.log('Original date input:', date);
-      console.log('Parsed date:', parsedDate);
-      console.log('Start UTC:', startUTC);
-      console.log('End UTC:', endUTC);
-      
-      // Validate UTC strings
-      const startDate = new Date(startUTC);
-      const endDate = new Date(endUTC);
-      
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        throw new Error(`Invalid UTC date format: ${startUTC} or ${endUTC}`);
-      }
+      const startDateTime = `${parsedDate}T00:00:00+05:30`;
+      const endDateTime = `${parsedDate}T23:59:59+05:30`;
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-        `timeMin=${encodeURIComponent(startUTC)}&` +
-        `timeMax=${encodeURIComponent(endUTC)}&` +
+        `timeMin=${encodeURIComponent(startDateTime)}&` +
+        `timeMax=${encodeURIComponent(endDateTime)}&` +
         `singleEvents=true&` +
         `orderBy=startTime`;
-      
-      console.log('API URL:', url);
 
-      const result = await makeCalendarApiRequest(url, env);
+     const result = await makeCalendarApiRequest(url, env);
       const events = result.items || [];
 
+      const recommendations: string[] = [];
       const workingHours = [
         { start: 9, end: 12, period: 'Morning' },
         { start: 14, end: 17, period: 'Afternoon' }
@@ -330,8 +295,8 @@ server.tool(
       const bufferMinutes = 15;
       const totalBlockMinutes = appointmentMinutes + bufferMinutes;
 
-      let morningSlots = [];
-      let afternoonSlots = [];
+      let morningSlots: string[] = [];
+      let afternoonSlots: string[] = [];
 
       for (const period of workingHours) {
         const startMinutes = period.start * 60;
@@ -340,7 +305,7 @@ server.tool(
         for (
           let currentMinutes = startMinutes;
           currentMinutes <= endMinutes - totalBlockMinutes;
-          currentMinutes += totalBlockMinutes
+          currentMinutes += totalBlockMinutes // Skip to next valid slot respecting buffer
         ) {
           const startHour = Math.floor(currentMinutes / 60);
           const startMinute = currentMinutes % 60;
@@ -348,22 +313,16 @@ server.tool(
           const endHour = Math.floor(endTotalMinutes / 60);
           const endMinute = endTotalMinutes % 60;
 
-          // Create meeting time strings for the helper function
-          const meetingStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
-          const meetingEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
+          const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+          const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
 
-          // Use the existing helper function
-          if (isTimeSlotAvailable(events, meetingStart, meetingEnd, bufferMinutes)) {
-            // Create IST time objects for display formatting
-            const startIST = new Date(`${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`);
-            const endIST = new Date(`${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`);
-            
-            const startFormatted = startIST.toLocaleTimeString('en-IN', {
+          if (isTimeSlotAvailable(events, slotStart, slotEnd, bufferMinutes)) {
+            const startFormatted = new Date(slotStart).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
             });
-            const endFormatted = endIST.toLocaleTimeString('en-IN', {
+            const endFormatted = new Date(slotEnd).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
@@ -419,7 +378,6 @@ server.tool(
         ],
       };
     } catch (error) {
-      console.error('Error in recommendAppointmentTimes:', error);
       return {
         content: [
           {
@@ -431,7 +389,6 @@ server.tool(
     }
   }
 );
-
 	
 	// Schedule appointment tool
 server.tool(
