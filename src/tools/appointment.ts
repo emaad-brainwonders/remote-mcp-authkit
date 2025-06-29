@@ -258,11 +258,17 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
     if (userPhone && event.description && event.description.includes(userPhone)) found = true;
     return found;
 }
+// Helper function to convert IST to UTC
+function convertISTtoUTC(istDateString) {
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  return new Date(new Date(istDateString).getTime() - istOffset).toISOString();
+}
 
  export function setupAppointmentTools(server: McpServer, env: any) {
 	
 	// Recommend available appointment times
-	 server.tool(
+// Add debugging to see what's happening with date parsing
+server.tool(
   "recommendAppointmentTimes",
   "Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
   {
@@ -271,20 +277,47 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
   async ({ date }) => {
     try {
       const parsedDate = parseRelativeDate(date);
+      console.log('Original date input:', date);
+      console.log('Parsed date:', parsedDate);
+      
+      // Ensure parsedDate is in YYYY-MM-DD format
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(parsedDate)) {
+        throw new Error(`Invalid date format: ${parsedDate}. Expected YYYY-MM-DD format.`);
+      }
+      
       const displayDate = formatDateForDisplay(parsedDate);
 
-      const startDateTime = `${parsedDate}T00:00:00+05:30`;
-      const endDateTime = `${parsedDate}T23:59:59+05:30`;
+      // Convert IST to UTC for API call
+      const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+      const startUTC = new Date(new Date(`${parsedDate}T00:00:00`).getTime() - istOffset).toISOString();
+      const endUTC = new Date(new Date(`${parsedDate}T23:59:59`).getTime() - istOffset).toISOString();
+      
+      console.log('Original date input:', date);
+      console.log('Parsed date:', parsedDate);
+      console.log('Start UTC:', startUTC);
+      console.log('End UTC:', endUTC);
+      
+      // Validate UTC strings
+      const startDate = new Date(startUTC);
+      const endDate = new Date(endUTC);
+      
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        throw new Error(`Invalid UTC date format: ${startUTC} or ${endUTC}`);
+      }
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-        `timeMin=${encodeURIComponent(startDateTime)}&` +
-        `timeMax=${encodeURIComponent(endDateTime)}&` +
+        `timeMin=${encodeURIComponent(startUTC)}&` +
+        `timeMax=${encodeURIComponent(endUTC)}&` +
         `singleEvents=true&` +
         `orderBy=startTime`;
+      
+      console.log('API URL:', url);
 
-     const result = await makeCalendarApiRequest(url, env);
+      const result = await makeCalendarApiRequest(url, env);
       const events = result.items || [];
 
+      // ... rest of your existing code remains the same ...
       const recommendations: string[] = [];
       const workingHours = [
         { start: 9, end: 12, period: 'Morning' },
@@ -305,7 +338,7 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
         for (
           let currentMinutes = startMinutes;
           currentMinutes <= endMinutes - totalBlockMinutes;
-          currentMinutes += totalBlockMinutes // Skip to next valid slot respecting buffer
+          currentMinutes += totalBlockMinutes
         ) {
           const startHour = Math.floor(currentMinutes / 60);
           const startMinute = currentMinutes % 60;
@@ -313,16 +346,21 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
           const endHour = Math.floor(endTotalMinutes / 60);
           const endMinute = endTotalMinutes % 60;
 
-          const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
-          const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
+          // Create UTC times for slot checking, then convert to IST for display
+          const slotStartUTC = new Date(new Date(`${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`).getTime() - istOffset).toISOString();
+          const slotEndUTC = new Date(new Date(`${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`).getTime() - istOffset).toISOString();
 
-          if (isTimeSlotAvailable(events, slotStart, slotEnd, bufferMinutes)) {
-            const startFormatted = new Date(slotStart).toLocaleTimeString('en-IN', {
+          if (isTimeSlotAvailable(events, slotStartUTC, slotEndUTC, bufferMinutes)) {
+            // Create IST time objects for display formatting
+            const startIST = new Date(`${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`);
+            const endIST = new Date(`${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`);
+            
+            const startFormatted = startIST.toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
             });
-            const endFormatted = new Date(slotEnd).toLocaleTimeString('en-IN', {
+            const endFormatted = endIST.toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
@@ -378,6 +416,7 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
         ],
       };
     } catch (error) {
+      console.error('Error in recommendAppointmentTimes:', error);
       return {
         content: [
           {
@@ -385,10 +424,12 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
             text: `❌ I couldn't check your availability. ${error instanceof Error ? error.message : 'Please try again later.'}`,
           },
         ],
+
       };
     }
   }
 );
+
 	
 	// Schedule appointment tool
 server.tool(
