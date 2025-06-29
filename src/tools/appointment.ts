@@ -164,39 +164,39 @@ function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: st
   return true;
 }
 // Helper: Parse attendees from various input formats
-function parseAttendeesInput(attendees: any): string[] {Add commentMore actions
-	if (!attendees) return [];
-	
-	// If it's already an array
-	if (Array.isArray(attendees)) {
-		return attendees
-			.map(item => {
-				if (typeof item === 'string') return item;
-				if (typeof item === 'object' && item.email) return item.email;
-				return null;
-			})
-			.filter(Boolean) as string[];
-	}
-	
-	// If it's a string that looks like a JSON array
-	if (typeof attendees === 'string') {
-		try {
-			// Try to parse as JSON first
-			const parsed = JSON.parse(attendees);
-			return parseAttendeesInput(parsed);
-		} catch {
-			// If JSON parsing fails, treat as a single email or comma-separated emails
-			if (attendees.includes('@')) {
-				// Split by comma and clean up
-				return attendees
-					.split(',')
-					.map(email => email.trim())
-					.filter(email => email.includes('@'));
-			}
-		}
-	}
-	
-	return [];
+function parseAttendeesInput(attendees: any): string[] {
+    if (!attendees) return [];
+    
+    // If it's already an array
+    if (Array.isArray(attendees)) {
+        return attendees
+            .map(item => {
+                if (typeof item === 'string') return item;
+                if (typeof item === 'object' && item.email) return item.email;
+                return null;
+            })
+            .filter(Boolean) as string[];
+    }
+    
+    // If it's a string that looks like a JSON array
+    if (typeof attendees === 'string') {
+        try {
+            // Try to parse as JSON first
+            const parsed = JSON.parse(attendees);
+            return parseAttendeesInput(parsed);
+        } catch {
+            // If JSON parsing fails, treat as a single email or comma-separated emails
+            if (attendees.includes('@')) {
+                // Split by comma and clean up
+                return attendees
+                    .split(',')
+                    .map(email => email.trim())
+                    .filter(email => email.includes('@'));
+            }
+        }
+    }
+    
+    return [];
 }
 
 // Helper: Make API request with better error handling
