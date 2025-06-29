@@ -140,36 +140,28 @@ function validateTimeFormat(time: string): boolean {
 	return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
 }
 
-// Helper: Check if a time slot is available
+// Helper: Always create a Date object in Asia/Kolkata for a given date and time
+function kolkataDate(date: string, time: string = "00:00"): Date {
+  // date: "YYYY-MM-DD", time: "HH:MM"
+  // Returns a Date object representing that local time in Asia/Kolkata
+  return new Date(`${date}T${time}:00+05:30`);
+}
+
+// Update isTimeSlotAvailable to use kolkataDate
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
-  const startTime = new Date(meetingStart + '+05:30').getTime();
-  const endTime = new Date(meetingEnd + '+05:30').getTime();
-  
-  // Add buffer AFTER the meeting end time 
-  const endTimeWithBuffer = endTime + (15 * 60 * 1000); // Fixed 15-minute buffer
-  
+  // meetingStart and meetingEnd are in "YYYY-MM-DDTHH:MM:SS"
+  const [startDate, startTime] = meetingStart.split("T");
+  const [endDate, endTime] = meetingEnd.split("T");
+  const startTimeMs = kolkataDate(startDate, startTime.slice(0,5)).getTime();
+  const endTimeMs = kolkataDate(endDate, endTime.slice(0,5)).getTime();
+  const endTimeWithBuffer = endTimeMs + (bufferMinutes * 60 * 1000);
+
   for (const event of events) {
-    // Skip all-day events
-    if (!event.start?.dateTime || !event.end?.dateTime) {
-      continue;
-    }
-    
+    if (!event.start?.dateTime || !event.end?.dateTime) continue;
     const eventStart = new Date(event.start.dateTime).getTime();
     const eventEnd = new Date(event.end.dateTime).getTime();
-    
-    // Check for overlap: our meeting (with buffer) overlaps with existing event
-    // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
-    const hasOverlap = startTime < eventEnd && endTimeWithBuffer > eventStart;
-    
-    if (hasOverlap) {
-      console.log(`Overlap detected with event: ${event.summary}`);
-      console.log(`Existing: ${new Date(eventStart).toLocaleString()} - ${new Date(eventEnd).toLocaleString()}`);
-      console.log(`Requested: ${new Date(startTime).toLocaleString()} - ${new Date(endTime).toLocaleString()}`);
-      console.log(`With Buffer: ${new Date(startTime).toLocaleString()} - ${new Date(endTimeWithBuffer).toLocaleString()}`);
-      return false;
-    }
+    if (startTimeMs < eventEnd && endTimeWithBuffer > eventStart) return false;
   }
-  
   return true;
 }
 
@@ -454,12 +446,12 @@ server.tool(
       const startDateTime = startDateObj.toISOString().slice(0, 19);
       const endDateTime = endDateObj.toISOString().slice(0, 19);
 
-      const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
+      const displayStartTime = kolkataDate(parsedDate, startTime).toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
       });
-      const displayEndTime = endDateObj.toLocaleTimeString('en-IN', {
+      const displayEndTime = kolkataDate(parsedDate, endTime).toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
@@ -1314,7 +1306,7 @@ server.tool(
 				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
 
-			//Build success response
+			//Build response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
 			const displayNewStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
@@ -1446,4 +1438,4 @@ server.tool(
     }
 );
 
-} 
+}
