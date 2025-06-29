@@ -852,7 +852,6 @@ server.tool(
 	}
 );
 
-// Reschedule Appointment Tool (uses cancel and schedule tools)
 server.tool(
 	"rescheduleAppointment",
 	"Reschedule an existing appointment to a new date and time by canceling the old one and creating a new one",
@@ -874,6 +873,7 @@ server.tool(
 		// Options
 		checkAvailability: z.coerce.boolean().default(true).describe("Check if the new time slot is available before rescheduling"),
 		sendReminder: z.coerce.boolean().default(true).describe("Send email reminder for the new appointment"),
+		forceProceed: z.coerce.boolean().default(true).describe("Continue with reschedule even if original appointment cancellation fails"),
 	},
 	async ({ 
 		summary, 
@@ -887,8 +887,14 @@ server.tool(
 		newDescription,
 		newAppointmentType,
 		checkAvailability = true,
-		sendReminder = true 
+		sendReminder = true,
+		forceProceed = true 
 	}) => {
+		let newAppointmentId = null;
+		let originalEvent = null;
+		let cancelationFailed = false;
+		let cancelationError = '';
+
 		try {
 			// Get current date for logging
 			const today = new Date().toLocaleDateString('en-IN', {
@@ -974,7 +980,7 @@ server.tool(
 			}
 
 			//Filter events based on search criteria
-			const matchingEvents = events.filter((event: any) => {
+			const matchingEvents = events.filter((event) => {
 				// Skip cancelled or deleted events
 				if (event.status === 'cancelled') return false;
 				
@@ -1002,7 +1008,7 @@ server.tool(
 				
 				if (userEmail) {
 					// Check attendees
-					if (event.attendees && event.attendees.some((attendee: any) => 
+					if (event.attendees && event.attendees.some((attendee) => 
 						attendee.email && attendee.email.toLowerCase() === userEmail.toLowerCase()
 					)) {
 						matches = true;
@@ -1046,7 +1052,7 @@ server.tool(
 			}
 
 			if (matchingEvents.length > 1) {
-				const appointmentList = matchingEvents.slice(0, 5).map((event: any, index: number) => {
+				const appointmentList = matchingEvents.slice(0, 5).map((event, index) => {
 					const start = event.start?.dateTime || event.start?.date;
 					const eventDate = start ? new Date(start).toLocaleDateString('en-IN', {
 						timeZone: 'Asia/Kolkata',
@@ -1076,7 +1082,7 @@ server.tool(
 			}
 
 			//Get the appointment to reschedule
-			const originalEvent = matchingEvents[0];
+			originalEvent = matchingEvents[0];
 			const originalStart = originalEvent.start?.dateTime || originalEvent.start?.date;
 			let originalStartDate = null;
 			let originalDate = '';
@@ -1136,7 +1142,7 @@ server.tool(
 			// Get email from attendees if not found in description
 			if (!extractedUserEmail && originalEvent.attendees && originalEvent.attendees.length > 0) {
 				// Find the first attendee that's not the organizer
-				const userAttendee = originalEvent.attendees.find((attendee: any) => 
+				const userAttendee = originalEvent.attendees.find((attendee) => 
 					attendee.email && 
 					attendee.email !== originalEvent.organizer?.email &&
 					!attendee.email.includes('calendar.google.com')
@@ -1170,7 +1176,7 @@ server.tool(
 					`orderBy=startTime`;
 				
 				const checkResult = await makeCalendarApiRequest(checkUrl, env);
-				const existingEvents = (checkResult.items || []).filter((event: any) => 
+				const existingEvents = (checkResult.items || []).filter((event) => 
 					event.id !== originalEvent.id && event.status !== 'cancelled'
 				);
 				
@@ -1178,7 +1184,7 @@ server.tool(
 				const newStart = newStartDateObj.getTime();
 				const newEnd = newEndDateObj.getTime();
 				
-				const hasConflict = existingEvents.some((event: any) => {
+				const hasConflict = existingEvents.some((event) => {
 					const eventStart = event.start?.dateTime || event.start?.date;
 					if (!eventStart) return false;
 					
@@ -1270,15 +1276,15 @@ server.tool(
 
 			// Get original attendees (excluding the user email to avoid duplicates)
 			const originalAttendees = (originalEvent.attendees || [])
-				.map((attendee: any) => attendee.email)
-				.filter((email: string) => email && email.toLowerCase() !== finalUserEmail.toLowerCase());
+				.map((attendee) => attendee.email)
+				.filter((email) => email && email.toLowerCase() !== finalUserEmail.toLowerCase());
 
 			const newEvent = {
 				summary: `${finalSummary} - ${finalUserName}`,
 				description: fullDescription,
 				start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
 				end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-				attendees: [finalUserEmail, ...originalAttendees].map((email: string) => ({ email })),
+				attendees: [finalUserEmail, ...originalAttendees].map((email) => ({ email })),
 				reminders: sendReminder ? {
 					useDefault: false,
 					overrides: [
@@ -1298,21 +1304,26 @@ server.tool(
 				}
 			);
 
-			// Cancel original appointment only after new one is created successfully
+			newAppointmentId = createResult.id;
+
+			// Try to cancel original appointment 
 			try {
 				const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`;
 				await makeCalendarApiRequest(cancelUrl, env, { method: "DELETE" });
 			} catch (cancelError) {
-				// If cancellation fails, try to delete the new appointment to maintain consistency
-				try {
-					const deleteNewUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${createResult.id}`;
-					await makeCalendarApiRequest(deleteNewUrl, env, { method: "DELETE" });
-				} catch (deleteError) {
-					// Ignore deletion error
-				}
+				cancelationFailed = true;
+				cancelationError = cancelError instanceof Error ? cancelError.message : 'Unknown cancellation error';
 				
-				const errorMsg = cancelError instanceof Error ? cancelError.message : 'Unknown error';
-				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
+				// If forceProceed is false, delete the new appointment and throw error
+				if (!forceProceed) {
+					try {
+						const deleteNewUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${newAppointmentId}`;
+						await makeCalendarApiRequest(deleteNewUrl, env, { method: "DELETE" });
+					} catch (deleteError) {
+						// Ignore deletion error - we'll mention both appointments exist
+					}
+					throw new Error(`Failed to cancel original appointment: ${cancelationError}`);
+				}
 			}
 
 			//Build response
@@ -1328,10 +1339,24 @@ server.tool(
 				timeZone: 'Asia/Kolkata'
 			});
 
-			let responseText = `✅ **Appointment successfully rescheduled!**\n\n`;
-			responseText += `🔄 **Schedule Change:**\n`;
-			responseText += `**From:** ${originalDate} at ${originalTime}\n`;
-			responseText += `**To:** ${displayNewDate} at ${responseStartTime} - ${responseEndTime}\n\n`;
+			let responseText = '';
+			
+			if (cancelationFailed) {
+				responseText += `⚠️ **Partial reschedule completed**\n\n`;
+				responseText += `✅ **New appointment created successfully**\n`;
+				responseText += `❌ **Original appointment cancellation failed**\n\n`;
+				responseText += `⚠️ **IMPORTANT:** You now have TWO appointments:\n`;
+				responseText += `1. **Original:** ${originalDate} at ${originalTime}\n`;
+				responseText += `2. **New:** ${displayNewDate} at ${responseStartTime} - ${responseEndTime}\n\n`;
+				responseText += `❗ **Action Required:** Please manually cancel the original appointment in Google Calendar\n\n`;
+				responseText += `🔗 **Error Details:** ${cancelationError}\n\n`;
+			} else {
+				responseText += `✅ **Appointment successfully rescheduled!**\n\n`;
+				responseText += `🔄 **Schedule Change:**\n`;
+				responseText += `**From:** ${originalDate} at ${originalTime}\n`;
+				responseText += `**To:** ${displayNewDate} at ${responseStartTime} - ${responseEndTime}\n\n`;
+			}
+			
 			responseText += `👤 **Client Details:**\n`;
 			responseText += `**Name:** ${finalUserName}\n`;
 			responseText += `**Email:** ${finalUserEmail}\n`;
@@ -1349,14 +1374,18 @@ server.tool(
 			}
 
 			if (createResult.htmlLink) {
-				responseText += `\n🔗 [View in Google Calendar](${createResult.htmlLink})`;
+				responseText += `\n🔗 [View New Appointment in Google Calendar](${createResult.htmlLink})`;
 			}
 
 			if (sendReminder) {
 				responseText += `\n\n📨 **Reminders set:** Email (1 day before) • Popup (30 minutes before)`;
 			}
 
-			responseText += `\n\n🎉 **All done!** The appointment has been rescheduled and all attendees have been notified.`;
+			if (!cancelationFailed) {
+				responseText += `\n\n🎉 **All done!** The appointment has been rescheduled and all attendees have been notified.`;
+			} else {
+				responseText += `\n\n⚠️ **Next Steps:**\n1. Check your Google Calendar\n2. Manually delete the original appointment\n3. The new appointment is ready to use`;
+			}
 
 			return {
 				content: [{
@@ -1366,6 +1395,16 @@ server.tool(
 			};
 
 		} catch (error) {
+			// If we created a new appointment but the overall process failed, try to clean up
+			if (newAppointmentId && !cancelationFailed) {
+				try {
+					const deleteNewUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${newAppointmentId}`;
+					await makeCalendarApiRequest(deleteNewUrl, env, { method: "DELETE" });
+				} catch (deleteError) {
+					// Ignore deletion error - we'll mention both appointments exist
+				}
+			}
+
 			let errorMessage = 'An unexpected error occurred while rescheduling the appointment.';
 			
 			if (error instanceof Error) {
@@ -1384,10 +1423,18 @@ server.tool(
 				}
 			}
 
+			let responseText = `❌ **Reschedule failed**\n\n**Error:** ${errorMessage}`;
+			
+			if (newAppointmentId) {
+				responseText += `\n\n⚠️ **Important:** A new appointment may have been created (ID: ${newAppointmentId}). Please check your calendar and clean up if necessary.`;
+			}
+			
+			responseText += `\n\n💡 **Troubleshooting:**\n• Verify the original appointment exists\n• Ensure all required fields are provided\n• Check date and time formats\n• Confirm calendar permissions\n• Try with more specific search criteria\n• Set forceProceed to true to continue even if cancellation fails`;
+
 			return {
 				content: [{
 					type: "text",
-					text: `❌ **Reschedule failed**\n\n**Error:** ${errorMessage}\n\n💡 **Troubleshooting:**\n• Verify the original appointment exists\n• Ensure all required fields are provided\n• Check date and time formats\n• Confirm calendar permissions\n• Try with more specific search criteria`
+					text: responseText
 				}]
 			};
 		}
