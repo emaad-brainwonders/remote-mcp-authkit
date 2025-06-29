@@ -804,21 +804,16 @@ server.tool(
 	"rescheduleAppointment",
 	"Reschedule an existing appointment to a new date and time by canceling the old one and creating a new one",
 	{
-		// Original appointment search criteria
 		summary: z.string().min(1).nullish().describe("Title/summary of the appointment to reschedule (optional if user info is provided)"),
 		currentDate: z.string().min(1).nullish().describe("Current date of the appointment in YYYY-MM-DD format or relative expression (optional if user info is provided)"),
 		userName: z.string().nullish().describe("Full name of the person booking the appointment (optional)"),
 		userEmail: z.string().email().nullish().describe("Email address of the person booking (optional)"),
 		userPhone: z.string().nullish().describe("Phone number of the person booking (optional)"),
-		
-		// New appointment details
 		newDate: z.string().min(1).describe("New date for the appointment in YYYY-MM-DD format or relative expression"),
 		newStartTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).describe("New start time in HH:MM format (24-hour)"),
 		newSummary: z.string().nullish().describe("New title/summary for the appointment (optional - keeps original if not provided)"),
 		newDescription: z.string().nullish().describe("New description for the appointment (optional - keeps original if not provided)"),
 		newAppointmentType: z.enum(['online', 'offline']).nullish().describe("New appointment type (optional - keeps original if not provided)"),
-		
-		// Options
 		checkAvailability: z.coerce.boolean().default(true).describe("Check if the new time slot is available before rescheduling"),
 		sendReminder: z.coerce.boolean().default(true).describe("Send email reminder for the new appointment"),
 	},
@@ -837,35 +832,13 @@ server.tool(
 		sendReminder = true 
 	}) => {
 		try {
-			// Step 1: Validate inputs
-			if (!summary && !currentDate && !userName && !userEmail && !userPhone) {
-				return {
-					content: [{
-						type: "text",
-						text: "❌ **Missing search criteria**\n\nTo reschedule an appointment, please provide at least one of:\n• Appointment title/summary\n• Current date of appointment\n• User name, email, or phone number"
-					}]
-				};
-			}
+			const today = getCurrentDate();
+			const parsedDate = parseRelativeDate(newDate);
+			const displayDate = formatDateForDisplay(parsedDate);
 
-			// Validate new date and time
-			const parsedNewDate = parseRelativeDate(newDate);
-			if (!parsedNewDate) {
-				return {
-					content: [{
-						type: "text",
-						text: "❌ **Invalid new date format**\n\nPlease use YYYY-MM-DD format or relative expressions like 'today', 'tomorrow', 'next week', etc."
-					}]
-				};
-			}
-
-			if (!validateTimeFormat(newStartTime)) {
-				return {
-					content: [{
-						type: "text",
-						text: "❌ **Invalid time format**\n\nPlease use HH:MM format (24-hour), e.g., '10:00', '14:30'"
-					}]
-				};
-			}
+			if (!validateTimeFormat(newStartTime)) throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
+			const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+			if (!phoneRegex.test(userPhone.replace(/[\s\-\(\)]/g, ''))) throw new Error("Invalid phone number format. Please include country code for international numbers");
 
 			// Find the appointment to reschedule
 			let events = [];
@@ -1173,86 +1146,33 @@ server.tool(
 				};
 			}
 
-			//Create new appointment first (safer approach)
-			const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
-			const newStartDateObj = new Date(`${newStartDateTime}+05:30`);
+			//Build new event times
+			const newStartDateTime = `${parsedNewDate}T${newStartTime}:00+05:30`;
+			const newStartDateObj = new Date(newStartDateTime);
 			const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
-			
-			const today = getCurrentDate();
-			
-			// Build description
-			const appointmentDetails = [
-				`👤 **Client Information:**`,
-				`Name: ${finalUserName}`,
-				`Email: ${finalUserEmail}`,
-				`Phone: ${finalUserPhone}`,
-				``,
-				`📋 **Appointment Details:**`,
-				`Type: ${finalAppointmentType.charAt(0).toUpperCase() + finalAppointmentType.slice(1)} Meeting`,
-				`Duration: 45 minutes`,
-			];
+			const shiftedStart = new Date(newStartDateObj.getTime() + SHIFT_MS);
+			const shiftedEnd = new Date(newEndDateObj.getTime() + SHIFT_MS);
+			const startDateTime = shiftedStart.toISOString().slice(0, 19);
+			const endDateTime = shiftedEnd.toISOString().slice(0, 19);
 
-			// Add custom description if provided
-			if (newDescription) {
-				appointmentDetails.push(``, `📝 **Notes:**`, newDescription);
-			} else if (originalEvent.description && !originalEvent.description.includes('Client Information:')) {
-				appointmentDetails.push(``, `📝 **Notes:**`, originalEvent.description);
-			}
-
-			appointmentDetails.push(``, `🔄 **Rescheduled on:** ${today}`);
-			appointmentDetails.push(`📅 **Originally:** ${originalDate} at ${originalTime}`);
-
-			const fullDescription = appointmentDetails.join('\n');
-
-			// Get original attendees (excluding the user email to avoid duplicates)
-			const originalAttendees = (originalEvent.attendees || [])
-				.map((attendee: any) => attendee.email)
-				.filter((email: string) => email && email.toLowerCase() !== finalUserEmail.toLowerCase());
-
-			const newEvent = {
+			// Use scheduleCalendarEvent helper
+			const result = await scheduleCalendarEvent({
 				summary: `${finalSummary} - ${finalUserName}`,
 				description: fullDescription,
-				start: { 
-					dateTime: `${newStartDateTime}:00`, 
-					timeZone: "Asia/Kolkata" 
-				},
-				end: { 
-					dateTime: newEndDateObj.toISOString().slice(0, 19), 
-					timeZone: "Asia/Kolkata" 
-				},
-				attendees: [finalUserEmail, ...originalAttendees].map((email: string) => ({ email })),
-				reminders: sendReminder ? {
-					useDefault: false,
-					overrides: [
-						{ method: 'email', minutes: 24 * 60 },
-						{ method: 'popup', minutes: 30 },
-					],
-				} : { useDefault: false },
-			};
+				startDateTime,
+				endDateTime,
+				attendees: [finalUserEmail, ...originalAttendees].map(email => ({ email })),
+				sendReminder,
+				env
+			});
 
-			// Create new appointment
-			const createResult = await makeCalendarApiRequest(
-				"https://www.googleapis.com/calendar/v3/calendars/primary/events",
-				env,
-				{
-					method: "POST",
-					body: JSON.stringify(newEvent),
-				}
-			);
-
-			// Cancel original appointment only after new one is created successfully
+			// Use cancelCalendarEvent helper
 			try {
-				const cancelUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${originalEvent.id}`;
-				await makeCalendarApiRequest(cancelUrl, env, { method: "DELETE" });
+				await cancelCalendarEvent(originalEvent.id, env);
 			} catch (cancelError) {
-				// If cancellation fails, try to delete the new appointment to maintain consistency
 				try {
-					const deleteNewUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${createResult.id}`;
-					await makeCalendarApiRequest(deleteNewUrl, env, { method: "DELETE" });
-				} catch (deleteError) {
-					// Ignore deletion error
-				}
-				
+					await cancelCalendarEvent(result.id, env);
+				} catch {}
 				const errorMsg = cancelError instanceof Error ? cancelError.message : 'Unknown error';
 				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
@@ -1290,8 +1210,8 @@ server.tool(
 				responseText += `**Additional Attendees:** ${originalAttendees.join(', ')}\n`;
 			}
 
-			if (createResult.htmlLink) {
-				responseText += `\n🔗 [View in Google Calendar](${createResult.htmlLink})`;
+			if (result.htmlLink) {
+				responseText += `\n🔗 [View in Google Calendar](${result.htmlLink})`;
 			}
 
 			if (sendReminder) {
@@ -1395,3 +1315,4 @@ server.tool(
         }
     }
 );}
+
