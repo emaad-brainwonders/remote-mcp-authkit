@@ -147,121 +147,25 @@ function shiftTimeBackwards530(dateTimeIso: string): string {
     return shifted.toISOString().slice(0, 19);
 }
 
-// Helper: Check if a time slot is available (NO 5:30 shift applied to slot times)
+// Helper: Check if a time slot is available (NO shift applied to slot times)
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
-  // meetingStart and meetingEnd are in local time (Asia/Kolkata)
   const startTime = new Date(meetingStart).getTime();
   const endTime = new Date(meetingEnd).getTime();
   const endTimeWithBuffer = endTime + (bufferMinutes * 60 * 1000);
 
   for (const event of events) {
-    // Skip all-day events
-    if (!event.start?.dateTime || !event.end?.dateTime) {
-      continue;
-    }
-    // Compare in local time (Asia/Kolkata)
+    if (!event.start?.dateTime || !event.end?.dateTime) continue;
     const eventStart = new Date(event.start.dateTime).getTime();
     const eventEnd = new Date(event.end.dateTime).getTime();
-
-    // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
-    const hasOverlap = startTime < eventEnd && endTimeWithBuffer > eventStart;
-    if (hasOverlap) {
+    if (startTime < eventEnd && endTimeWithBuffer > eventStart) {
       return false;
     }
   }
   return true;
 }
 
-// Helper: Parse attendees from various input formats
-function parseAttendeesInput(attendees: any): string[] {
-	if (!attendees) return [];
-	
-	// If it's already an array
-	if (Array.isArray(attendees)) {
-		return attendees
-			.map(item => {
-				if (typeof item === 'string') return item;
-				if (typeof item === 'object' && item.email) return item.email;
-				return null;
-			})
-			.filter(Boolean) as string[];
-	}
-	
-	// If it's a string that looks like a JSON array
-	if (typeof attendees === 'string') {
-		try {
-			// Try to parse as JSON first
-			const parsed = JSON.parse(attendees);
-			return parseAttendeesInput(parsed);
-		} catch {
-			// If JSON parsing fails, treat as a single email or comma-separated emails
-			if (attendees.includes('@')) {
-				// Split by comma and clean up
-				return attendees
-					.split(',')
-					.map(email => email.trim())
-					.filter(email => email.includes('@'));
-			}
-		}
-	}
-	
-	return [];
-}
-
-// Helper: Make API request with better error handling
-async function makeCalendarApiRequest(url: string, env: any, options: RequestInit = {}): Promise<any> {
-	try {
-		const token = getAccessToken(env);
-		
-		const response = await fetch(url, {
-			...options,
-			headers: {
-				Authorization: `Bearer ${token}`,
-				"Content-Type": "application/json",
-				...options.headers,
-			},
-		});
-		
-		if (!response.ok) {
-			const errorBody = await response.text();
-			let errorMessage = `Google Calendar API error: ${response.status}`;
-			
-			try {
-				const errorJson = JSON.parse(errorBody);
-				if (errorJson.error?.message) {
-					errorMessage += ` - ${errorJson.error.message}`;
-				}
-			} catch {
-				errorMessage += ` - ${errorBody}`;
-			}
-			
-			throw new Error(errorMessage);
-		}
-		
-		return await response.json();
-	} catch (error) {
-		if (error instanceof Error) {
-			throw error;
-		}
-		throw new Error(`Unexpected error: ${String(error)}`);
-	}
-}
-
-function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { userName?: string, userEmail?: string, userPhone?: string }) {
-    let found = false;
-    // Match by summary (name)
-    if (userName && event.summary && event.summary.toLowerCase().includes(userName.toLowerCase())) found = true;
-    // Match by attendee email
-    if (userEmail && event.attendees && event.attendees.some((a: any) => a.email && a.email.toLowerCase() === userEmail.toLowerCase())) found = true;
-    // Match by phone in description
-    if (userPhone && event.description && event.description.includes(userPhone)) found = true;
-    return found;
-}
-
- export function setupAppointmentTools(server: McpServer, env: any) {
-	
-	// Recommend available appointment times
-	 server.tool(
+// Recommend available appointment times (only available slots, no shift)
+server.tool(
   "recommendAppointmentTimes",
   "Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
   {
@@ -284,7 +188,6 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
       const result = await makeCalendarApiRequest(url, env);
       const events = result.items || [];
 
-      const recommendations: string[] = [];
       const workingHours = [
         { start: 9, end: 12, period: 'Morning' },
         { start: 14, end: 17, period: 'Afternoon' }
@@ -315,7 +218,7 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
           const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00+05:30`;
           const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00+05:30`;
 
-          // Do NOT use shiftTimeBackwards530 for slot times, only for event times if needed for display
+          // Only add slot if available (no shift)
           if (isTimeSlotAvailable(events, slotStart, slotEnd, bufferMinutes)) {
             const startFormatted = new Date(slotStart).toLocaleTimeString('en-IN', {
               hour: '2-digit',
@@ -389,8 +292,8 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
     }
   }
 );
-	
-	// Schedule appointment tool
+
+// Schedule appointment tool (apply 5:30 forward shift ONLY here)
 server.tool(
   "scheduleAppointment",
   "Schedule an appointment via Google Calendar (uses Asia/Kolkata timezone) with comprehensive user information and appointment format. Supports relative dates like 'today', 'tomorrow', '10 days from now', etc.",
@@ -447,11 +350,16 @@ server.tool(
       const appointmentMinutes = 45;
       const bufferMinutes = 15;
 
+      // 5:30 forward shift ONLY here
       const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
       const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
 
-      const startDateTime = startDateObj.toISOString().slice(0, 19);
-      const endDateTime = endDateObj.toISOString().slice(0, 19);
+      // Add 5:30 forward shift (in ms)
+      const shiftedStart = new Date(startDateObj.getTime() + 19800000);
+      const shiftedEnd = new Date(endDateObj.getTime() + 19800000);
+
+      const startDateTime = shiftedStart.toISOString().slice(0, 19);
+      const endDateTime = shiftedEnd.toISOString().slice(0, 19);
 
       const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
@@ -475,7 +383,6 @@ server.tool(
         const checkResult = await makeCalendarApiRequest(checkUrl, env);
         const existingEvents = checkResult.items || [];
 
-        // Do NOT use shiftTimeBackwards530 for slot times in isTimeSlotAvailable
         if (!isTimeSlotAvailable(existingEvents, `${parsedDate}T${startTime}:00+05:30`, endDateObj.toISOString(), bufferMinutes)) {
           return {
             content: [
