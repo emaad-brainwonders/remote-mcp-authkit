@@ -140,10 +140,19 @@ function validateTimeFormat(time: string): boolean {
 	return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
 }
 
+// Helper: Subtract 5:30 (19800000 ms) from a date string in ISO format
+function shiftTimeBackwards530(dateTimeIso: string): string {
+	const date = new Date(dateTimeIso);
+	// Subtract 5:30 in milliseconds (5*60+30)*60*1000 = 19800000
+	const shifted = new Date(date.getTime() - 19800000);
+	return shifted.toISOString().slice(0, 19);
+}
+
 // Helper: Check if a time slot is available
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
-  const startTime = new Date(meetingStart + '+05:30').getTime();
-  const endTime = new Date(meetingEnd + '+05:30').getTime();
+  // Apply 5:30 shift backwards to slot times
+  const startTime = new Date(new Date(meetingStart).getTime() - 19800000).getTime();
+  const endTime = new Date(new Date(meetingEnd).getTime() - 19800000).getTime();
   
   // Add buffer AFTER the meeting end time 
   const endTimeWithBuffer = endTime + (15 * 60 * 1000); // Fixed 15-minute buffer
@@ -154,8 +163,9 @@ function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: st
       continue;
     }
     
-    const eventStart = new Date(event.start.dateTime).getTime();
-    const eventEnd = new Date(event.end.dateTime).getTime();
+    // Apply 5:30 shift backwards to event times
+    const eventStart = new Date(new Date(event.start.dateTime).getTime() - 19800000).getTime();
+    const eventEnd = new Date(new Date(event.end.dateTime).getTime() - 19800000).getTime();
     
     // Check for overlap: our meeting (with buffer) overlaps with existing event
     // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
