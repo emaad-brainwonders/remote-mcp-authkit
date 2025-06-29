@@ -45,11 +45,11 @@ interface SearchOptions {
 // Connection pool for better performance
 let connectionPool: mysql.Pool | null = null;
 
-function getConnectionPool(): mysql.Pool {
+async function getConnection() {
   if (!connectionPool) {
     connectionPool = mysql.createPool(DB_CONFIG);
   }
-  return connectionPool;
+  return connectionPool.getConnection();
 }
 
 // Enhanced client identifier extraction with validation
@@ -217,7 +217,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
       }
     },
     async (...args: any[]) => {
-      const pool = getConnectionPool();
+      let connection: mysql.PoolConnection | null = null;
       
       try {
         // Extract parameters
@@ -252,13 +252,14 @@ export function registerReportTools(server: McpServer, env?: any): void {
           sortOrder: params.sort_order || 'desc'
         };
 
+        connection = await getConnection();
         const query = buildSearchQuery(options);
         const searchTerm = `%${sanitizedQuery}%`;
         const clientId = isNaN(Number(sanitizedQuery)) ? -1 : parseInt(sanitizedQuery);
         
         console.log(`Searching for: "${sanitizedQuery}" with options:`, options);
         
-        const [rows] = await pool.execute(query, [searchTerm, clientId, searchTerm]);
+        const [rows] = await connection.execute(query, [searchTerm, clientId, searchTerm]);
         const typedRows = rows as DatabaseRow[];
         
         const results: ReportResult[] = typedRows.map((row: DatabaseRow) => ({
@@ -288,6 +289,10 @@ export function registerReportTools(server: McpServer, env?: any): void {
             text: `❌ Database Error: ${errorMessage}\n\nPlease try again or contact support if the issue persists.`
           }]
         };
+      } finally {
+        if (connection) {
+          connection.release();
+        }
       }
     }
   );
@@ -309,7 +314,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
       }
     },
     async (...args: any[]) => {
-      const pool = getConnectionPool();
+      let connection: mysql.PoolConnection | null = null;
       
       try {
         const params = args[0] || {};
@@ -325,6 +330,8 @@ export function registerReportTools(server: McpServer, env?: any): void {
         }
 
         const sanitizedQuery = sanitizeInput(searchQuery);
+        connection = await getConnection();
+        
         const query = `
           SELECT uniqueid, FileName, ClientName, ClientID, ReportPath, ReportPdfPath, UploadTime
           FROM zipfile 
@@ -338,7 +345,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
         const searchTerm = `%${sanitizedQuery}%`;
         const clientId = isNaN(Number(sanitizedQuery)) ? -1 : parseInt(sanitizedQuery);
         
-        const [rows] = await pool.execute(query, [searchTerm, clientId]);
+        const [rows] = await connection.execute(query, [searchTerm, clientId]);
         const typedRows = rows as DatabaseRow[];
         
         if (typedRows.length === 0) {
@@ -372,6 +379,10 @@ export function registerReportTools(server: McpServer, env?: any): void {
             text: `❌ Error: ${errorMessage}`
           }]
         };
+      } finally {
+        if (connection) {
+          connection.release();
+        }
       }
     }
   );
@@ -387,10 +398,12 @@ export function registerReportTools(server: McpServer, env?: any): void {
       }
     },
     async () => {
-      const pool = getConnectionPool();
+      let connection: mysql.PoolConnection | null = null;
       
       try {
-        const [rows] = await pool.execute(`
+        connection = await getConnection();
+        
+        const [rows] = await connection.execute(`
           SELECT 
             COUNT(*) as total_records,
             COUNT(CASE WHEN ReportPath != '' AND ReportPath IS NOT NULL THEN 1 END) as records_with_reports,
@@ -420,16 +433,22 @@ export function registerReportTools(server: McpServer, env?: any): void {
             text: `❌ **Database Connection: Failed**\n\nError: ${(error as Error).message}`
           }]
         };
+      } finally {
+        if (connection) {
+          connection.release();
+        }
       }
     }
   );
 
-  // Cleanup function for graceful shutdown
-  process.on('SIGINT', async () => {
-    if (connectionPool) {
-      console.log('Closing database connection pool...');
-      await connectionPool.end();
-    }
-    process.exit(0);
-  });
+  // Cleanup function for graceful shutdown (if running in Node.js environment)
+  if (typeof process !== 'undefined' && process.on) {
+    process.on('SIGINT', async () => {
+      if (connectionPool) {
+        console.log('Closing database connection pool...');
+        await connectionPool.end();
+      }
+      process.exit(0);
+    });
+  }
 }
