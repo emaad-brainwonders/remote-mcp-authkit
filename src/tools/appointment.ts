@@ -269,6 +269,9 @@ function convertISTtoUTC(istDateString) {
 	// Recommend available appointment times
 // Add debugging to see what's happening with date parsing
 server.tool(
+  
+// Add debugging to see what's happening with date parsing
+server.tool(
   "recommendAppointmentTimes",
   "Get recommended available appointment times for a specific date. Supports relative dates like 'today', 'tomorrow', '10 days from now', 'next week', etc.",
   {
