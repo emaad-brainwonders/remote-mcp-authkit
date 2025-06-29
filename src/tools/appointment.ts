@@ -266,9 +266,6 @@ function convertISTtoUTC(istDateString) {
 
  export function setupAppointmentTools(server: McpServer, env: any) {
 	
-	// Recommend available appointment times
-// Add debugging to see what's happening with date parsing
-server.tool(
   
 // Add debugging to see what's happening with date parsing
 server.tool(
