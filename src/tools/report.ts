@@ -31,13 +31,6 @@ interface ReportResult {
   uploadTime: Date;
 }
 
-interface ToolResponse {
-  content: Array<{
-    type: 'text';
-    text: string;
-  }>;
-}
-
 // Database connection helper
 async function getConnection() {
   try {
@@ -48,11 +41,31 @@ async function getConnection() {
   }
 }
 
-// Tool handler function
-async function handleGetReport(args: { client_identifier: string }): Promise<ToolResponse> {
+// Tool handler function - Updated to match MCP SDK signature
+async function handleGetReport(
+  args: { [key: string]: any }, 
+  extra: any
+): Promise<{
+  content: Array<{
+    type: 'text';
+    text: string;
+  }>;
+}> {
   let connection: any = null;
   
   try {
+    // Extract client_identifier from args
+    const clientIdentifier = args.client_identifier as string;
+    
+    if (!clientIdentifier) {
+      return {
+        content: [{
+          type: 'text',
+          text: 'Error: client_identifier parameter is required'
+        }]
+      };
+    }
+    
     connection = await getConnection();
     
     // Search by both ClientName and ClientID
@@ -63,8 +76,8 @@ async function handleGetReport(args: { client_identifier: string }): Promise<Too
       ORDER BY UploadTime DESC
     `;
     
-    const searchTerm = `%${args.client_identifier}%`;
-    const clientId = isNaN(Number(args.client_identifier)) ? -1 : parseInt(args.client_identifier);
+    const searchTerm = `%${clientIdentifier}%`;
+    const clientId = isNaN(Number(clientIdentifier)) ? -1 : parseInt(clientIdentifier);
     
     // Use execute method (should work with mysql2/promise)
     const [rows] = await connection.execute(query, [searchTerm, clientId]);
@@ -74,7 +87,7 @@ async function handleGetReport(args: { client_identifier: string }): Promise<Too
       return {
         content: [{
           type: 'text',
-          text: `No reports found for client: ${args.client_identifier}`
+          text: `No reports found for client: ${clientIdentifier}`
         }]
       };
     }
@@ -125,18 +138,15 @@ async function handleGetReport(args: { client_identifier: string }): Promise<Too
 
 // Export function to register the report tools
 export function registerReportTools(server: McpServer, env?: any): void {
-  server.tool('get_report_path', {
-    description: 'Get report path from database by client name or client ID',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        client_identifier: {
-          type: 'string',
-          description: 'Client name or client ID to search for'
-        }
-      },
-      required: ['client_identifier'],
-      additionalProperties: false
-    }
-  }, handleGetReport);
+  server.tool(
+    'get_report_path',
+    'Get report path from database by client name or client ID',
+    {
+      client_identifier: {
+        type: 'string',
+        description: 'Client name or client ID to search for'
+      }
+    },
+    handleGetReport
+  );
 }
