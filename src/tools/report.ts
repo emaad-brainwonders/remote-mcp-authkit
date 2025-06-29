@@ -46,30 +46,42 @@ export function registerReportTools(server: McpServer, env?: any): void {
   server.tool(
     "get_report_path",
     {
-      description: "Get report path for a client by name or ID",
+      description: "Get report path for a client by name or ID. Use this when user asks for report, report path, or client information.",
       inputSchema: {
         type: "object",
         properties: {
           client_identifier: {
             type: "string",
             description: "Client name or client ID to search for"
+          },
+          client_id: {
+            type: "string",
+            description: "Alternative: Client ID to search for"
+          },
+          client_name: {
+            type: "string",
+            description: "Alternative: Client name to search for"
           }
         },
-        required: ["client_identifier"]
+        required: []
       }
     },
-    async ({ client_identifier }) => {
+    async (args) => {
       let connection: any = null;
       
       try {
-        // Debug: Log the received parameter
-        console.log('Received client_identifier:', client_identifier);
+        // Extract identifier from multiple possible parameter names
+        const client_identifier = args.client_identifier || args.client_id || args.client_name;
+        
+        // Debug: Log the received parameters
+        console.log('Received args:', JSON.stringify(args));
+        console.log('Extracted client_identifier:', client_identifier);
         
         if (!client_identifier) {
           return {
             content: [{
               type: 'text',
-              text: `Error: client_identifier parameter is required.`
+              text: `Error: client_identifier, client_id, or client_name parameter is required. Received: ${JSON.stringify(args)}`
             }]
           };
         }
