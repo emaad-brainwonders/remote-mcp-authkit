@@ -44,37 +44,32 @@ async function getConnection() {
 // Export function to register the report tools
 export function registerReportTools(server: McpServer, env?: any): void {
   server.tool(
-    'get_report_path',
+    "get_report_path",
     {
-      description: 'Get report path for a client by name or ID',
+      description: "Get report path for a client by name or ID",
       inputSchema: {
-        type: 'object',
+        type: "object",
         properties: {
           client_identifier: {
-            type: 'string',
-            description: 'Client name or client ID to search for'
+            type: "string",
+            description: "Client name or client ID to search for"
           }
         },
-        required: ['client_identifier']
+        required: ["client_identifier"]
       }
     },
-    async (args) => {
+    async ({ client_identifier }) => {
       let connection: any = null;
       
       try {
-        // Debug: Log the received args
-        console.log('Received args:', JSON.stringify(args));
+        // Debug: Log the received parameter
+        console.log('Received client_identifier:', client_identifier);
         
-        // Extract client_identifier from args
-        const clientIdentifier = args.client_identifier;
-        
-        console.log('Extracted clientIdentifier:', clientIdentifier);
-        
-        if (!clientIdentifier) {
+        if (!client_identifier) {
           return {
             content: [{
               type: 'text',
-              text: `Error: client_identifier parameter is required. Received args: ${JSON.stringify(args)}`
+              text: `Error: client_identifier parameter is required.`
             }]
           };
         }
@@ -89,8 +84,8 @@ export function registerReportTools(server: McpServer, env?: any): void {
           ORDER BY UploadTime DESC
         `;
         
-        const searchTerm = `%${clientIdentifier}%`;
-        const clientId = isNaN(Number(clientIdentifier)) ? -1 : parseInt(clientIdentifier);
+        const searchTerm = `%${client_identifier}%`;
+        const clientId = isNaN(Number(client_identifier)) ? -1 : parseInt(client_identifier);
         
         console.log('Executing query with:', { searchTerm, clientId });
         
@@ -102,7 +97,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
           return {
             content: [{
               type: 'text',
-              text: `No reports found for client: ${clientIdentifier}`
+              text: `No reports found for client: ${client_identifier}`
             }]
           };
         }
@@ -128,7 +123,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
         return {
           content: [{
             type: 'text',
-            text: `Found ${results.length} report(s) for client "${clientIdentifier}":\n\n${reportText}`
+            text: `Found ${results.length} report(s) for client "${client_identifier}":\n\n${reportText}`
           }]
         };
         
