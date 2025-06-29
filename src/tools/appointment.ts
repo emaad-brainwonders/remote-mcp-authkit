@@ -142,8 +142,8 @@ function validateTimeFormat(time: string): boolean {
 
 // Helper: Check if a time slot is available
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
-  const startTime = new Date(meetingStart).getTime();
-  const endTime = new Date(meetingEnd).getTime();
+  const startTime = new Date(meetingStart + '+05:30').getTime();
+  const endTime = new Date(meetingEnd + '+05:30').getTime();
   
   // Add buffer AFTER the meeting end time 
   const endTimeWithBuffer = endTime + (15 * 60 * 1000); // Fixed 15-minute buffer
@@ -273,8 +273,8 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
 
-      const startDateTime = `${parsedDate}T00:00:00`;
-      const endDateTime = `${parsedDate}T23:59:59`;
+      const startDateTime = `${parsedDate}T00:00:00+05:30`;
+      const endDateTime = `${parsedDate}T23:59:59+05:30`;
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
         `timeMin=${encodeURIComponent(startDateTime)}&` +
@@ -430,20 +430,36 @@ server.tool(
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
 
-      const startDateTime = `${parsedDate}T${startTime}:00`; // No Z, no offset
-      const endDateTime = (() => {
-        const [h, m] = startTime.split(':').map(Number);
-        const start = new Date(`${parsedDate}T${startTime}:00`);
-        const end = new Date(start.getTime() + 45 * 60 * 1000);
-        return `${parsedDate}T${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}:00`;
-      })();
+      if (!validateTimeFormat(startTime)) {
+        throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
+      }
 
-      const displayStartTime = new Date(startDateTime).toLocaleTimeString('en-IN', {
+      const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+      if (!phoneRegex.test(userPhone.replace(/[\s\-\(\)]/g, ''))) {
+        throw new Error("Invalid phone number format. Please include country code for international numbers");
+      }
+
+      const parsedAttendees = parseAttendeesInput(attendees);
+      const allAttendees = [userEmail, ...parsedAttendees].filter((email, index, arr) =>
+        arr.indexOf(email) === index
+      );
+
+      const appointmentMinutes = 45;
+      const bufferMinutes = 15;
+
+      // Create proper date objects with timezone
+      const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
+      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
+
+      const startDateTime = startDateObj.toISOString().slice(0, 19);
+      const endDateTime = endDateObj.toISOString().slice(0, 19);
+
+      const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
       });
-      const displayEndTime = new Date(endDateTime).toLocaleTimeString('en-IN', {
+      const displayEndTime = endDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
@@ -451,8 +467,8 @@ server.tool(
 
       // Check availability with proper overlap detection
       if (checkAvailability) {
-        const dayStartTime = `${parsedDate}T00:00:00`;
-        const dayEndTime = `${parsedDate}T23:59:59`;
+        const dayStartTime = `${parsedDate}T00:00:00+05:30`;
+        const dayEndTime = `${parsedDate}T23:59:59+05:30`;
         const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
           `timeMin=${encodeURIComponent(dayStartTime)}&` +
           `timeMax=${encodeURIComponent(dayEndTime)}&` +
@@ -492,16 +508,12 @@ server.tool(
 
       const fullDescription = appointmentDetails.join('\n');
 
-      // Add this line after extracting attendees:
-      const parsedAttendees = parseAttendeesInput(attendees);
-      const allAttendees = [userEmail, ...parsedAttendees];
-
       const event = {
         summary: `${summary} - ${userName}`,
         description: fullDescription,
         start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
         end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-        attendees: allAttendees.map((email: string) => ({ email })),
+        attendees: allAttendees.map(email => ({ email })),
         reminders: sendReminder ? {
           useDefault: false,
           overrides: [
@@ -636,8 +648,8 @@ server.tool(
 					};
 				}
 				displayDate = formatDateForDisplay(parsedDate);
-				const startDateTime = `${parsedDate}T00:00:00`;
-				const endDateTime = `${parsedDate}T23:59:59`;
+				const startDateTime = `${parsedDate}T00:00:00+05:30`;
+				const endDateTime = `${parsedDate}T23:59:59+05:30`;
 				searchTimeWindow = `on ${displayDate}`;
 				
 				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
@@ -922,8 +934,8 @@ server.tool(
 					};
 				}
 				
-				const startDateTime = `${parsedCurrentDate}T00:00:00`;
-				const endDateTime = `${parsedCurrentDate}T23:59:59`;
+				const startDateTime = `${parsedCurrentDate}T00:00:00+05:30`;
+				const endDateTime = `${parsedCurrentDate}T23:59:59+05:30`;
 				searchTimeWindow = `on ${formatDateForDisplay(parsedCurrentDate)}`;
 				
 				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
@@ -1141,12 +1153,12 @@ server.tool(
 			//  Check availability for new time slot
 			if (checkAvailability) {
 				const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
-				const newStartDateObj = new Date(`${newStartDateTime}`);
+				const newStartDateObj = new Date(`${newStartDateTime}+05:30`);
 				const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
 				
 				// Check for conflicts on the new date
-				const dayStartTime = `${parsedNewDate}T00:00:00`;
-				const dayEndTime = `${parsedNewDate}T23:59:59`;
+				const dayStartTime = `${parsedNewDate}T00:00:00+05:30`;
+				const dayEndTime = `${parsedNewDate}T23:59:59+05:30`;
 				
 				const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
 					`timeMin=${encodeURIComponent(dayStartTime)}&` +
@@ -1220,9 +1232,8 @@ server.tool(
 
 			//Create new appointment first (safer approach)
 			const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
-			const newStartDateObj = new Date(`${newStartDateTime}`);
-			const newEndDateObj = new Date(new Date(newStartDateTime).getTime() + 45 * 60 * 1000);
-			const newEndDateTime = `${parsedNewDate}T${newEndDateObj.getHours().toString().padStart(2, '0')}:${newEndDateObj.getMinutes().toString().padStart(2, '0')}:00`;
+			const newStartDateObj = new Date(`${newStartDateTime}+05:30`);
+			const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
 			
 			const today = getCurrentDate();
 			
@@ -1258,8 +1269,14 @@ server.tool(
 			const newEvent = {
 				summary: `${finalSummary} - ${finalUserName}`,
 				description: fullDescription,
-				start: { dateTime: newStartDateTime, timeZone: "Asia/Kolkata" },
-				end: { dateTime: newEndDateTime, timeZone: "Asia/Kolkata" },
+				start: { 
+					dateTime: `${newStartDateTime}:00`, 
+					timeZone: "Asia/Kolkata" 
+				},
+				end: { 
+					dateTime: newEndDateObj.toISOString().slice(0, 19), 
+					timeZone: "Asia/Kolkata" 
+				},
 				attendees: [finalUserEmail, ...originalAttendees].map((email: string) => ({ email })),
 				reminders: sendReminder ? {
 					useDefault: false,
@@ -1297,7 +1314,7 @@ server.tool(
 				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
 
-			//Build response
+			//Build success response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
 			const displayNewStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
@@ -1427,4 +1444,6 @@ server.tool(
             };
         }
     }
-);}
+);
+
+} 
