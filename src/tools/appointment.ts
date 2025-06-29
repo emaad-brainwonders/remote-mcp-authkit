@@ -433,26 +433,21 @@ server.tool(
         arr.indexOf(email) === index
       );
 
+      // Only declare these ONCE:
       const appointmentMinutes = 45;
       const bufferMinutes = 15;
-
-      // 5:30 forward shift ONLY here
-      const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
-      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
-
-      // Add 5:30 forward shift (in ms)
-      const shiftedStart = new Date(startDateObj.getTime() + 19800000);
-      const shiftedEnd = new Date(endDateObj.getTime() + 19800000);
-
+      const newStartDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
+      const newEndDateObj = new Date(newStartDateObj.getTime() + appointmentMinutes * 60 * 1000);
+      const shiftedStart = new Date(newStartDateObj.getTime() + 19800000);
+      const shiftedEnd = new Date(newEndDateObj.getTime() + 19800000);
       const startDateTime = shiftedStart.toISOString().slice(0, 19);
       const endDateTime = shiftedEnd.toISOString().slice(0, 19);
-
-      const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
+      const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
       });
-      const displayEndTime = endDateObj.toLocaleTimeString('en-IN', {
+      const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
@@ -1147,20 +1142,15 @@ server.tool(
 			}
 
 			// --- Build new appointment times (apply 5:30 forward shift as in scheduleAppointment) ---
+			// Only declare these ONCE:
 			const appointmentMinutes = 45;
 			const bufferMinutes = 15;
-
-			// Compose new start/end Date objects in Asia/Kolkata, then shift +5:30 (19800000 ms)
 			const newStartDateObj = new Date(`${parsedNewDate}T${newStartTime}:00+05:30`);
 			const newEndDateObj = new Date(newStartDateObj.getTime() + appointmentMinutes * 60 * 1000);
-
-			// Apply 5:30 forward shift (in ms)
 			const shiftedStart = new Date(newStartDateObj.getTime() + 19800000);
 			const shiftedEnd = new Date(newEndDateObj.getTime() + 19800000);
-
 			const startDateTime = shiftedStart.toISOString().slice(0, 19);
 			const endDateTime = shiftedEnd.toISOString().slice(0, 19);
-
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
 			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
