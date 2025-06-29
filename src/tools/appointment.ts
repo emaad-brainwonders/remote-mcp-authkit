@@ -273,8 +273,10 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
 
-      const startDateTime = new Date(`${parsedDate}T00:00:00+05:30`).toISOString();
-      const endDateTime = new Date(`${parsedDate}T23:59:59+05:30`).toISOString();
+      const startDateTime = `${parsedDate}T00:00:00+05:30`;
+      const endDateObj = new Date(`${parsedDate}T00:00:00+05:30`);
+      endDateObj.setDate(endDateObj.getDate() + 1); // Set to next day
+      const endDateTime = `${parsedDate}T${endDateObj.getHours().toString().padStart(2, '0')}:${endDateObj.getMinutes().toString().padStart(2, '0')}:00+05:30`;
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
         `timeMin=${encodeURIComponent(startDateTime)}&` +
@@ -449,7 +451,8 @@ server.tool(
 
       // Create proper date objects with timezone
       const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
-      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
+      const endDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
+      endDateObj.setMinutes(endDateObj.getMinutes() + appointmentMinutes);
 
       const startDateTime = startDateObj.toISOString().slice(0, 19);
       const endDateTime = endDateObj.toISOString().slice(0, 19);
