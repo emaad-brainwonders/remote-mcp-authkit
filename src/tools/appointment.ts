@@ -140,26 +140,126 @@ function validateTimeFormat(time: string): boolean {
 	return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
 }
 
-// --- FIX 1: isTimeSlotAvailable ---
-// Remove '+05:30' from new Date() construction, expect slot strings to already include offset if needed
+// Helper: Check if a time slot is available
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
-  const startTime = new Date(meetingStart).getTime();
-  const endTime = new Date(meetingEnd).getTime();
-  const endTimeWithBuffer = endTime + (bufferMinutes * 60 * 1000);
-
+  const startTime = new Date(meetingStart + '+05:30').getTime();
+  const endTime = new Date(meetingEnd + '+05:30').getTime();
+  
+  // Add buffer AFTER the meeting end time 
+  const endTimeWithBuffer = endTime + (15 * 60 * 1000); // Fixed 15-minute buffer
+  
   for (const event of events) {
-    if (!event.start?.dateTime || !event.end?.dateTime) continue;
+    // Skip all-day events
+    if (!event.start?.dateTime || !event.end?.dateTime) {
+      continue;
+    }
+    
     const eventStart = new Date(event.start.dateTime).getTime();
     const eventEnd = new Date(event.end.dateTime).getTime();
+    
+    // Check for overlap: our meeting (with buffer) overlaps with existing event
+    // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
     const hasOverlap = startTime < eventEnd && endTimeWithBuffer > eventStart;
-    if (hasOverlap) return false;
+    
+    if (hasOverlap) {
+      console.log(`Overlap detected with event: ${event.summary}`);
+      console.log(`Existing: ${new Date(eventStart).toLocaleString()} - ${new Date(eventEnd).toLocaleString()}`);
+      console.log(`Requested: ${new Date(startTime).toLocaleString()} - ${new Date(endTime).toLocaleString()}`);
+      console.log(`With Buffer: ${new Date(startTime).toLocaleString()} - ${new Date(endTimeWithBuffer).toLocaleString()}`);
+      return false;
+    }
   }
+  
   return true;
 }
 
-// --- FIX 2: recommendAppointmentTimes ---
-// Use '+05:30' offset in API query, but NOT in slot generation or display
-export function setupAppointmentTools(server: McpServer, env: any) {
+// Helper: Parse attendees from various input formats
+function parseAttendeesInput(attendees: any): string[] {
+	if (!attendees) return [];
+	
+	// If it's already an array
+	if (Array.isArray(attendees)) {
+		return attendees
+			.map(item => {
+				if (typeof item === 'string') return item;
+				if (typeof item === 'object' && item.email) return item.email;
+				return null;
+			})
+			.filter(Boolean) as string[];
+	}
+	
+	// If it's a string that looks like a JSON array
+	if (typeof attendees === 'string') {
+		try {
+			// Try to parse as JSON first
+			const parsed = JSON.parse(attendees);
+			return parseAttendeesInput(parsed);
+		} catch {
+			// If JSON parsing fails, treat as a single email or comma-separated emails
+			if (attendees.includes('@')) {
+				// Split by comma and clean up
+				return attendees
+					.split(',')
+					.map(email => email.trim())
+					.filter(email => email.includes('@'));
+			}
+		}
+	}
+	
+	return [];
+}
+
+// Helper: Make API request with better error handling
+async function makeCalendarApiRequest(url: string, env: any, options: RequestInit = {}): Promise<any> {
+	try {
+		const token = getAccessToken(env);
+		
+		const response = await fetch(url, {
+			...options,
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+				...options.headers,
+			},
+		});
+		
+		if (!response.ok) {
+			const errorBody = await response.text();
+			let errorMessage = `Google Calendar API error: ${response.status}`;
+			
+			try {
+				const errorJson = JSON.parse(errorBody);
+				if (errorJson.error?.message) {
+					errorMessage += ` - ${errorJson.error.message}`;
+				}
+			} catch {
+				errorMessage += ` - ${errorBody}`;
+			}
+			
+			throw new Error(errorMessage);
+		}
+		
+		return await response.json();
+	} catch (error) {
+		if (error instanceof Error) {
+			throw error;
+		}
+		throw new Error(`Unexpected error: ${String(error)}`);
+	}
+}
+
+function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { userName?: string, userEmail?: string, userPhone?: string }) {
+    let found = false;
+    // Match by summary (name)
+    if (userName && event.summary && event.summary.toLowerCase().includes(userName.toLowerCase())) found = true;
+    // Match by attendee email
+    if (userEmail && event.attendees && event.attendees.some((a: any) => a.email && a.email.toLowerCase() === userEmail.toLowerCase())) found = true;
+    // Match by phone in description
+    if (userPhone && event.description && event.description.includes(userPhone)) found = true;
+    return found;
+}
+
+ export function setupAppointmentTools(server: McpServer, env: any) {
 	
 	// Recommend available appointment times
 	 server.tool(
@@ -173,9 +273,8 @@ export function setupAppointmentTools(server: McpServer, env: any) {
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
 
-      // Use offset for API query
-      const startDateTime = `${parsedDate}T00:00:00+05:30`;
-      const endDateTime = `${parsedDate}T23:59:59+05:30`;
+      const startDateTime = new Date(`${parsedDate}T00:00:00+05:30`).toISOString();
+      const endDateTime = new Date(`${parsedDate}T23:59:59+05:30`).toISOString();
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
         `timeMin=${encodeURIComponent(startDateTime)}&` +
@@ -183,7 +282,7 @@ export function setupAppointmentTools(server: McpServer, env: any) {
         `singleEvents=true&` +
         `orderBy=startTime`;
 
-      const result = await makeCalendarApiRequest(url, env);
+     const result = await makeCalendarApiRequest(url, env);
       const events = result.items || [];
 
       const recommendations: string[] = [];
@@ -206,7 +305,7 @@ export function setupAppointmentTools(server: McpServer, env: any) {
         for (
           let currentMinutes = startMinutes;
           currentMinutes <= endMinutes - totalBlockMinutes;
-          currentMinutes += totalBlockMinutes
+          currentMinutes += totalBlockMinutes // Skip to next valid slot respecting buffer
         ) {
           const startHour = Math.floor(currentMinutes / 60);
           const startMinute = currentMinutes % 60;
@@ -214,17 +313,16 @@ export function setupAppointmentTools(server: McpServer, env: any) {
           const endHour = Math.floor(endTotalMinutes / 60);
           const endMinute = endTotalMinutes % 60;
 
-          // No offset in slot strings, just plain local time
           const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
           const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
 
-          if (isTimeSlotAvailable(events, slotStart + '+05:30', slotEnd + '+05:30', bufferMinutes)) {
-            const startFormatted = new Date(slotStart + '+05:30').toLocaleTimeString('en-IN', {
+          if (isTimeSlotAvailable(events, slotStart, slotEnd, bufferMinutes)) {
+            const startFormatted = new Date(slotStart).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
             });
-            const endFormatted = new Date(slotEnd + '+05:30').toLocaleTimeString('en-IN', {
+            const endFormatted = new Date(slotEnd).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
@@ -332,15 +430,42 @@ server.tool(
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
 
-      // Use offset for Date construction
+      if (!validateTimeFormat(startTime)) {
+        throw new Error("Invalid time format. Use HH:MM format (e.g., '10:00', '14:30')");
+      }
+
+      const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+      if (!phoneRegex.test(userPhone.replace(/[\s\-\(\)]/g, ''))) {
+        throw new Error("Invalid phone number format. Please include country code for international numbers");
+      }
+
+      const parsedAttendees = parseAttendeesInput(attendees);
+      const allAttendees = [userEmail, ...parsedAttendees].filter((email, index, arr) =>
+        arr.indexOf(email) === index
+      );
+
+      const appointmentMinutes = 45;
+      const bufferMinutes = 15;
+
+      // Create proper date objects with timezone
       const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
-      const endDateObj = new Date(startDateObj.getTime() + 45 * 60 * 1000);
+      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
 
-      // Use local time string for event object, always specify timeZone
-      const startDateTime = `${parsedDate}T${startTime}:00`;
-      const endDateTime = `${formatDateToString(endDateObj)}T${endDateObj.getHours().toString().padStart(2, '0')}:${endDateObj.getMinutes().toString().padStart(2, '0')}:00`;
+      const startDateTime = startDateObj.toISOString().slice(0, 19);
+      const endDateTime = endDateObj.toISOString().slice(0, 19);
 
-      // Check availability with offset in API query
+      const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata'
+      });
+      const displayEndTime = endDateObj.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata'
+      });
+
+      // Check availability with proper overlap detection
       if (checkAvailability) {
         const dayStartTime = `${parsedDate}T00:00:00+05:30`;
         const dayEndTime = `${parsedDate}T23:59:59+05:30`;
@@ -351,12 +476,14 @@ server.tool(
           `orderBy=startTime`;
         const checkResult = await makeCalendarApiRequest(checkUrl, env);
         const existingEvents = checkResult.items || [];
-        if (!isTimeSlotAvailable(existingEvents, startDateTime + '+05:30', endDateTime + '+05:30')) {
+
+        // Check if the time slot is available (45 min meeting + 15 min buffer = 60 min total)
+        if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime)) {
           return {
             content: [
               {
                 type: "text",
-                text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayDate} ${startTime} - ${endDateObj.getHours().toString().padStart(2, '0')}:${endDateObj.getMinutes().toString().padStart(2, '0')} conflicts with an existing appointment or doesn't allow for a 15-minute buffer after the meeting.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots.`,
+                text: `⚠️ **Time slot unavailable**\n\nThe time slot ${displayStartTime} - ${displayEndTime} on ${displayDate} conflicts with an existing appointment or doesn't allow for a 15-minute buffer after the meeting.\n\n💡 Use the 'recommendAppointmentTimes' tool to find available slots.`,
               },
             ],
           };
@@ -411,7 +538,7 @@ server.tool(
         const emailAppointmentDetails = {
           summary: `${summary} - ${userName}`,
           date: displayDate,
-          time: `${startDateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} - ${endDateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
+          time: `${displayStartTime} - ${displayEndTime}`,
           userName: userName
         };
         
@@ -432,7 +559,7 @@ server.tool(
       responseText += `📱 **Phone:** ${userPhone}\n\n`;
       responseText += `📋 **Event:** ${summary}\n`;
       responseText += `📅 **Date:** ${displayDate}\n`;
-      responseText += `⏰ **Time:** ${startDateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} - ${endDateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} (45 minutes)\n`;
+      responseText += `⏰ **Time:** ${displayStartTime} - ${displayEndTime} (45 minutes)\n`;
       responseText += `🔗 **Type:** ${appointmentType.charAt(0).toUpperCase() + appointmentType.slice(1)} Meeting\n`;
 
       if (description) {
@@ -521,8 +648,8 @@ server.tool(
 					};
 				}
 				displayDate = formatDateForDisplay(parsedDate);
-				const startDateTime = `${parsedDate}T00:00:00+05:30`;
-				const endDateTime = `${parsedDate}T23:59:59+05:30`;
+				const startDateTime = `${parsedDate}T00:00:00`;
+				const endDateTime = `${parsedDate}T23:59:59`;
 				searchTimeWindow = `on ${displayDate}`;
 				
 				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
@@ -723,8 +850,7 @@ server.tool(
 	}
 );
 
-// --- FIX 4: rescheduleAppointment ---
-// Use offset for API queries and slot checks, but always use local time with Asia/Kolkata for event creation
+// Reschedule Appointment Tool (uses cancel and schedule tools)
 server.tool(
 	"rescheduleAppointment",
 	"Reschedule an existing appointment to a new date and time by canceling the old one and creating a new one",
