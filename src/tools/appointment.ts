@@ -163,6 +163,7 @@ function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: st
   }
   return true;
 }
+export function setupAppointmentTools(server: McpServer, env: any) {
 
 // Recommend available appointment times (only available slots, no shift)
 server.tool(
