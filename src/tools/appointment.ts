@@ -142,10 +142,9 @@ function validateTimeFormat(time: string): boolean {
 
 // Helper: Subtract 5:30 (19800000 ms) from a date string in ISO format
 function shiftTimeBackwards530(dateTimeIso: string): string {
-	const date = new Date(dateTimeIso);
-	// Subtract 5:30 in milliseconds (5*60+30)*60*1000 = 19800000
-	const shifted = new Date(date.getTime() - 19800000);
-	return shifted.toISOString().slice(0, 19);
+    const date = new Date(dateTimeIso);
+    const shifted = new Date(date.getTime() - 19800000);
+    return shifted.toISOString().slice(0, 19);
 }
 
 // Helper: Check if a time slot is available
@@ -326,13 +325,16 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
           const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
           const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
 
+          // Use shiftTimeBackwards530 for slot times in isTimeSlotAvailable
           if (isTimeSlotAvailable(events, slotStart, slotEnd, bufferMinutes)) {
-            const startFormatted = new Date(slotStart).toLocaleTimeString('en-IN', {
+            const shiftedStart = shiftTimeBackwards530(slotStart);
+            const shiftedEnd = shiftTimeBackwards530(slotEnd);
+            const startFormatted = new Date(shiftedStart).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
             });
-            const endFormatted = new Date(slotEnd).toLocaleTimeString('en-IN', {
+            const endFormatted = new Date(shiftedEnd).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
@@ -457,7 +459,6 @@ server.tool(
       const appointmentMinutes = 45;
       const bufferMinutes = 15;
 
-      // Create proper date objects with timezone
       const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
       const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
 
@@ -475,7 +476,6 @@ server.tool(
         timeZone: 'Asia/Kolkata'
       });
 
-      // Check availability with proper overlap detection
       if (checkAvailability) {
         const dayStartTime = `${parsedDate}T00:00:00+05:30`;
         const dayEndTime = `${parsedDate}T23:59:59+05:30`;
@@ -487,8 +487,8 @@ server.tool(
         const checkResult = await makeCalendarApiRequest(checkUrl, env);
         const existingEvents = checkResult.items || [];
 
-        // Check if the time slot is available (45 min meeting + 15 min buffer = 60 min total)
-        if (!isTimeSlotAvailable(existingEvents, startDateTime, endDateTime)) {
+        // Use shiftTimeBackwards530 for slot times in isTimeSlotAvailable
+        if (!isTimeSlotAvailable(existingEvents, shiftTimeBackwards530(startDateTime), shiftTimeBackwards530(endDateTime))) {
           return {
             content: [
               {
@@ -753,18 +753,23 @@ server.tool(
 
 			if (matchingEvents.length > 1) {
 				const appointmentList = matchingEvents.map((event: any, index: number) => {
-					const start = event.start?.dateTime || event.start?.date;
-					const eventDate = start ? new Date(start).toLocaleDateString('en-IN') : 'Unknown date';
+					let start = event.start?.dateTime || event.start?.date;
+					let eventDate: string;
 					let timeString = 'All day';
-					
-					if (start && start.includes('T')) {
-						timeString = new Date(start).toLocaleTimeString('en-IN', {
+					if (event.start?.dateTime) {
+						const shifted = shiftTimeBackwards530(event.start.dateTime);
+						const shiftedDate = new Date(shifted);
+						eventDate = shiftedDate.toLocaleDateString('en-IN');
+						timeString = shiftedDate.toLocaleTimeString('en-IN', {
 							hour: '2-digit',
 							minute: '2-digit',
 							timeZone: 'Asia/Kolkata'
 						});
+					} else if (event.start?.date) {
+						eventDate = event.start.date;
+					} else {
+						eventDate = 'Unknown date';
 					}
-					
 					return `${index + 1}. **${event.summary}**\n   📅 ${eventDate} at ${timeString}`;
 				}).join('\n\n');
 
@@ -779,15 +784,21 @@ server.tool(
 			// Cancel the single matching event
 			const eventToCancel = matchingEvents[0];
 			const start = eventToCancel.start?.dateTime || eventToCancel.start?.date;
-			const eventDate = start ? new Date(start).toLocaleDateString('en-IN') : 'Unknown date';
+			let eventDate: string;
 			let timeString = 'All day';
-			
-			if (start && start.includes('T')) {
-				timeString = new Date(start).toLocaleTimeString('en-IN', {
+			if (eventToCancel.start?.dateTime) {
+				const shifted = shiftTimeBackwards530(eventToCancel.start.dateTime);
+				const shiftedDate = new Date(shifted);
+				eventDate = shiftedDate.toLocaleDateString('en-IN');
+				timeString = shiftedDate.toLocaleTimeString('en-IN', {
 					hour: '2-digit',
-					minute: '2-digit',
-					timeZone: 'Asia/Kolkata'
+				 minute: '2-digit',
+				 timeZone: 'Asia/Kolkata'
 				});
+			} else if (eventToCancel.start?.date) {
+				eventDate = eventToCancel.start.date;
+			} else {
+				eventDate = 'Unknown date';
 			}
 
 			// Extract user information from the event for confirmation
@@ -938,8 +949,8 @@ server.tool(
 				if (!parsedCurrentDate) {
 					return {
 						content: [{
-							type: "text",
-							text: "❌ **Invalid current date format**\n\nPlease use YYYY-MM-DD format or relative expressions."
+						 type: "text",
+						 text: "❌ **Invalid current date format**\n\nPlease use YYYY-MM-DD format or relative expressions."
 						}]
 					};
 				}
@@ -1078,31 +1089,25 @@ server.tool(
 			//Get the appointment to reschedule
 			const originalEvent = matchingEvents[0];
 			const originalStart = originalEvent.start?.dateTime || originalEvent.start?.date;
-			const originalStartDate = originalStart ? new Date(originalStart) : null;
-			
-			if (!originalStartDate) {
-				return {
-					content: [{
-						type: "text",
-						text: "❌ **Invalid original appointment**\n\nThe appointment found has an invalid date/time format."
-					}]
-				};
-			}
-
-			const originalDate = originalStartDate.toLocaleDateString('en-IN', {
-				timeZone: 'Asia/Kolkata',
-				year: 'numeric',
-				month: '2-digit',
-				day: '2-digit'
-			});
-			
+			let originalStartDate = null;
+			let originalDate = '';
 			let originalTime = 'All day';
-			if (originalStart && originalStart.includes('T')) {
+			if (originalEvent.start?.dateTime) {
+				const shifted = shiftTimeBackwards530(originalEvent.start.dateTime);
+				originalStartDate = new Date(shifted);
+				originalDate = originalStartDate.toLocaleDateString('en-IN', {
+					timeZone: 'Asia/Kolkata',
+					year: 'numeric',
+					month: '2-digit',
+					day: '2-digit'
+				});
 				originalTime = originalStartDate.toLocaleTimeString('en-IN', {
 					hour: '2-digit',
 					minute: '2-digit',
 					timeZone: 'Asia/Kolkata'
 				});
+			} else if (originalEvent.start?.date) {
+				originalDate = originalEvent.start.date;
 			}
 
 			//Extract user information from original event
@@ -1326,12 +1331,12 @@ server.tool(
 
 			//Build success response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
-			const displayNewStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
 				minute: '2-digit',
 				timeZone: 'Asia/Kolkata'
 			});
-			const displayNewEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+			const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
 				minute: '2-digit',
 				timeZone: 'Asia/Kolkata'
@@ -1340,7 +1345,7 @@ server.tool(
 			let responseText = `✅ **Appointment successfully rescheduled!**\n\n`;
 			responseText += `🔄 **Schedule Change:**\n`;
 			responseText += `**From:** ${originalDate} at ${originalTime}\n`;
-			responseText += `**To:** ${displayNewDate} at ${displayNewStartTime} - ${displayNewEndTime}\n\n`;
+			responseText += `**To:** ${displayNewDate} at ${displayStartTime} - ${displayEndTime}\n\n`;
 			responseText += `👤 **Client Details:**\n`;
 			responseText += `**Name:** ${finalUserName}\n`;
 			responseText += `**Email:** ${finalUserEmail}\n`;
@@ -1433,9 +1438,16 @@ server.tool(
             }
             
             const list = events.map((event: any) => {
-                const date = event.start?.dateTime
-                    ? new Date(event.start.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
-                    : event.start?.date;
+                let date: string;
+                if (event.start?.dateTime) {
+                    // Shift 5:30 backwards for display
+                    const shifted = shiftTimeBackwards530(event.start.dateTime);
+                    date = new Date(shifted).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+                } else if (event.start?.date) {
+                    date = event.start.date;
+                } else {
+                    date = 'Unknown';
+                }
                 return `- ${event.summary || "No Title"} on ${date}`;
             }).join('\n');
             
@@ -1454,6 +1466,4 @@ server.tool(
             };
         }
     }
-);
-
-} 
+);}
