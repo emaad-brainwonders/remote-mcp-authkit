@@ -424,7 +424,6 @@ server.tool(
             text: `❌ I couldn't check your availability. ${error instanceof Error ? error.message : 'Please try again later.'}`,
           },
         ],
-
       };
     }
   }
