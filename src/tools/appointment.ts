@@ -1146,6 +1146,33 @@ server.tool(
 				}
 			}
 
+			// --- Build new appointment times (apply 5:30 forward shift as in scheduleAppointment) ---
+			const appointmentMinutes = 45;
+			const bufferMinutes = 15;
+
+			// Compose new start/end Date objects in Asia/Kolkata, then shift +5:30 (19800000 ms)
+			const newStartDateObj = new Date(`${parsedNewDate}T${newStartTime}:00+05:30`);
+			const newEndDateObj = new Date(newStartDateObj.getTime() + appointmentMinutes * 60 * 1000);
+
+			// Apply 5:30 forward shift (in ms)
+			const shiftedStart = new Date(newStartDateObj.getTime() + 19800000);
+			const shiftedEnd = new Date(newEndDateObj.getTime() + 19800000);
+
+			const startDateTime = shiftedStart.toISOString().slice(0, 19);
+			const endDateTime = shiftedEnd.toISOString().slice(0, 19);
+
+			const displayNewDate = formatDateForDisplay(parsedNewDate);
+			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+			const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+
 			//  Check availability for new time slot
 			if (checkAvailability) {
 				const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
@@ -1265,14 +1292,8 @@ server.tool(
 			const newEvent = {
 				summary: `${finalSummary} - ${finalUserName}`,
 				description: fullDescription,
-				start: { 
-					dateTime: `${newStartDateTime}:00`, 
-					timeZone: "Asia/Kolkata" 
-				},
-				end: { 
-					dateTime: newEndDateObj.toISOString().slice(0, 19), 
-					timeZone: "Asia/Kolkata" 
-				},
+				start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
+				end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
 				attendees: [finalUserEmail, ...originalAttendees].map((email: string) => ({ email })),
 				reminders: sendReminder ? {
 					useDefault: false,
