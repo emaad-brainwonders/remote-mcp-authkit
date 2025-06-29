@@ -890,6 +890,14 @@ server.tool(
 		sendReminder = true 
 	}) => {
 		try {
+			// Get current date for logging
+			const today = new Date().toLocaleDateString('en-IN', {
+				timeZone: 'Asia/Kolkata',
+				year: 'numeric',
+				month: '2-digit',
+				day: '2-digit'
+			});
+
 			// Step 1: Validate inputs
 			if (!summary && !currentDate && !userName && !userEmail && !userPhone) {
 				return {
@@ -1189,12 +1197,12 @@ server.tool(
 				
 				if (hasConflict) {
 					const displayNewDate = formatDateForDisplay(parsedNewDate);
-					const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+					const conflictStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 						hour: '2-digit',
 						minute: '2-digit',
 						timeZone: 'Asia/Kolkata'
 					});
-					const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+					const conflictEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
 						hour: '2-digit',
 						minute: '2-digit',
 						timeZone: 'Asia/Kolkata'
@@ -1203,7 +1211,7 @@ server.tool(
 					return {
 						content: [{
 							type: "text",
-							text: `⚠️ **Time slot conflict detected**\n\nThe requested time ${displayStartTime} - ${displayEndTime} on ${displayNewDate} conflicts with an existing appointment.\n\n💡 **Options:**\n• Choose a different time\n• Use 'recommendAppointmentTimes' tool to find available slots\n• Set checkAvailability to false to override (not recommended)`
+							text: `⚠️ **Time slot conflict detected**\n\nThe requested time ${conflictStartTime} - ${conflictEndTime} on ${displayNewDate} conflicts with an existing appointment.\n\n💡 **Options:**\n• Choose a different time\n• Use 'recommendAppointmentTimes' tool to find available slots\n• Set checkAvailability to false to override (not recommended)`
 						}]
 					};
 				}
@@ -1235,17 +1243,6 @@ server.tool(
 
 			const startDateTime = shiftedStart.toISOString().slice(0, 19);
 			const endDateTime = shiftedEnd.toISOString().slice(0, 19);
-
-			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
-				hour: '2-digit',
-				minute: '2-digit',
-				timeZone: 'Asia/Kolkata'
-			});
-			const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
-				hour: '2-digit',
-				minute: '2-digit',
-				timeZone: 'Asia/Kolkata'
-			});
 
 			// Build description
 			const appointmentDetails = [
@@ -1320,12 +1317,12 @@ server.tool(
 
 			//Build response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
-			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+			const responseStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
 				minute: '2-digit',
 				timeZone: 'Asia/Kolkata'
 			});
-			const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+			const responseEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
 				minute: '2-digit',
 				timeZone: 'Asia/Kolkata'
@@ -1334,7 +1331,7 @@ server.tool(
 			let responseText = `✅ **Appointment successfully rescheduled!**\n\n`;
 			responseText += `🔄 **Schedule Change:**\n`;
 			responseText += `**From:** ${originalDate} at ${originalTime}\n`;
-			responseText += `**To:** ${displayNewDate} at ${displayStartTime} - ${displayEndTime}\n\n`;
+			responseText += `**To:** ${displayNewDate} at ${responseStartTime} - ${responseEndTime}\n\n`;
 			responseText += `👤 **Client Details:**\n`;
 			responseText += `**Name:** ${finalUserName}\n`;
 			responseText += `**Email:** ${finalUserEmail}\n`;
