@@ -890,8 +890,8 @@ server.tool(
 		sendReminder = true,
 		forceProceed = true 
 	}) => {
-		let newAppointmentId = null;
-		let originalEvent = null;
+		let newAppointmentId: string | null = null;
+		let originalEvent: any = null;
 		let cancelationFailed = false;
 		let cancelationError = '';
 
@@ -935,7 +935,7 @@ server.tool(
 			}
 
 			// Find the appointment to reschedule
-			let events = [];
+			let events: any[] = [];
 			let searchTimeWindow = "";
 
 			if (currentDate) {
@@ -980,7 +980,7 @@ server.tool(
 			}
 
 			//Filter events based on search criteria
-			const matchingEvents = events.filter((event) => {
+			const matchingEvents = events.filter((event: any) => {
 				// Skip cancelled or deleted events
 				if (event.status === 'cancelled') return false;
 				
@@ -1008,7 +1008,7 @@ server.tool(
 				
 				if (userEmail) {
 					// Check attendees
-					if (event.attendees && event.attendees.some((attendee) => 
+					if (event.attendees && event.attendees.some((attendee: any) => 
 						attendee.email && attendee.email.toLowerCase() === userEmail.toLowerCase()
 					)) {
 						matches = true;
@@ -1052,7 +1052,7 @@ server.tool(
 			}
 
 			if (matchingEvents.length > 1) {
-				const appointmentList = matchingEvents.slice(0, 5).map((event, index) => {
+				const appointmentList = matchingEvents.slice(0, 5).map((event: any, index: number) => {
 					const start = event.start?.dateTime || event.start?.date;
 					const eventDate = start ? new Date(start).toLocaleDateString('en-IN', {
 						timeZone: 'Asia/Kolkata',
@@ -1142,7 +1142,7 @@ server.tool(
 			// Get email from attendees if not found in description
 			if (!extractedUserEmail && originalEvent.attendees && originalEvent.attendees.length > 0) {
 				// Find the first attendee that's not the organizer
-				const userAttendee = originalEvent.attendees.find((attendee) => 
+				const userAttendee = originalEvent.attendees.find((attendee: any) => 
 					attendee.email && 
 					attendee.email !== originalEvent.organizer?.email &&
 					!attendee.email.includes('calendar.google.com')
@@ -1176,7 +1176,7 @@ server.tool(
 					`orderBy=startTime`;
 				
 				const checkResult = await makeCalendarApiRequest(checkUrl, env);
-				const existingEvents = (checkResult.items || []).filter((event) => 
+				const existingEvents = (checkResult.items || []).filter((event: any) => 
 					event.id !== originalEvent.id && event.status !== 'cancelled'
 				);
 				
@@ -1184,7 +1184,7 @@ server.tool(
 				const newStart = newStartDateObj.getTime();
 				const newEnd = newEndDateObj.getTime();
 				
-				const hasConflict = existingEvents.some((event) => {
+				const hasConflict = existingEvents.some((event: any) => {
 					const eventStart = event.start?.dateTime || event.start?.date;
 					if (!eventStart) return false;
 					
@@ -1276,15 +1276,15 @@ server.tool(
 
 			// Get original attendees (excluding the user email to avoid duplicates)
 			const originalAttendees = (originalEvent.attendees || [])
-				.map((attendee) => attendee.email)
-				.filter((email) => email && email.toLowerCase() !== finalUserEmail.toLowerCase());
+				.map((attendee: any) => attendee.email)
+				.filter((email: string) => email && email.toLowerCase() !== finalUserEmail.toLowerCase());
 
 			const newEvent = {
 				summary: `${finalSummary} - ${finalUserName}`,
 				description: fullDescription,
 				start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
 				end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-				attendees: [finalUserEmail, ...originalAttendees].map((email) => ({ email })),
+				attendees: [finalUserEmail, ...originalAttendees].map((email: string) => ({ email })),
 				reminders: sendReminder ? {
 					useDefault: false,
 					overrides: [
