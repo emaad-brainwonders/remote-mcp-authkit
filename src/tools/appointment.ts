@@ -274,9 +274,7 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
       const displayDate = formatDateForDisplay(parsedDate);
 
       const startDateTime = `${parsedDate}T00:00:00+05:30`;
-      const endDateObj = new Date(`${parsedDate}T00:00:00+05:30`);
-      endDateObj.setDate(endDateObj.getDate() + 1); // Set to next day
-      const endDateTime = `${parsedDate}T${endDateObj.getHours().toString().padStart(2, '0')}:${endDateObj.getMinutes().toString().padStart(2, '0')}:00+05:30`;
+      const endDateTime = `${parsedDate}T23:59:59+05:30`;
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
         `timeMin=${encodeURIComponent(startDateTime)}&` +
@@ -451,8 +449,7 @@ server.tool(
 
       // Create proper date objects with timezone
       const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
-      const endDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
-      endDateObj.setMinutes(endDateObj.getMinutes() + appointmentMinutes);
+      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
 
       const startDateTime = startDateObj.toISOString().slice(0, 19);
       const endDateTime = endDateObj.toISOString().slice(0, 19);
@@ -651,8 +648,8 @@ server.tool(
 					};
 				}
 				displayDate = formatDateForDisplay(parsedDate);
-				const startDateTime = `${parsedDate}T00:00:00`;
-				const endDateTime = `${parsedDate}T23:59:59`;
+				const startDateTime = `${parsedDate}T00:00:00+05:30`;
+				const endDateTime = `${parsedDate}T23:59:59+05:30`;
 				searchTimeWindow = `on ${displayDate}`;
 				
 				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
@@ -937,8 +934,8 @@ server.tool(
 					};
 				}
 				
-				const startDateTime = `${parsedCurrentDate}T00:00:00`;
-				const endDateTime = `${parsedCurrentDate}T23:59:59`;
+				const startDateTime = `${parsedCurrentDate}T00:00:00+05:30`;
+				const endDateTime = `${parsedCurrentDate}T23:59:59+05:30`;
 				searchTimeWindow = `on ${formatDateForDisplay(parsedCurrentDate)}`;
 				
 				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
@@ -1317,7 +1314,7 @@ server.tool(
 				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
 
-			//Build response
+			//Build success response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
 			const displayNewStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
@@ -1448,4 +1445,5 @@ server.tool(
         }
     }
 );
- }
+
+} 
