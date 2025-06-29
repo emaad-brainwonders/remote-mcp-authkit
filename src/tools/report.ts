@@ -146,9 +146,9 @@ async function handleGetReport(
 
 // Export function to register the report tools
 export function registerReportTools(server: McpServer, env?: any): void {
+  // Alternative registration approach - try this if the previous doesn't work
   server.tool(
     'get_report_path',
-    'Get report path from database by client name or client ID',
     {
       client_identifier: {
         type: 'string',
