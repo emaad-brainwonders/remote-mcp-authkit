@@ -147,38 +147,28 @@ function shiftTimeBackwards530(dateTimeIso: string): string {
     return shifted.toISOString().slice(0, 19);
 }
 
-// Helper: Check if a time slot is available
+// Helper: Check if a time slot is available (NO 5:30 shift applied to slot times, only to event times)
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
-  // Apply 5:30 shift backwards to slot times
-  const startTime = new Date(new Date(meetingStart).getTime() - 19800000).getTime();
-  const endTime = new Date(new Date(meetingEnd).getTime() - 19800000).getTime();
-  
-  // Add buffer AFTER the meeting end time 
-  const endTimeWithBuffer = endTime + (15 * 60 * 1000); // Fixed 15-minute buffer
-  
+  // meetingStart and meetingEnd are in local time (Asia/Kolkata)
+  const startTime = new Date(meetingStart).getTime();
+  const endTime = new Date(meetingEnd).getTime();
+  const endTimeWithBuffer = endTime + (bufferMinutes * 60 * 1000);
+
   for (const event of events) {
     // Skip all-day events
     if (!event.start?.dateTime || !event.end?.dateTime) {
       continue;
     }
-    
-    // Apply 5:30 shift backwards to event times
-    const eventStart = new Date(new Date(event.start.dateTime).getTime() - 19800000).getTime();
-    const eventEnd = new Date(new Date(event.end.dateTime).getTime() - 19800000).getTime();
-    
-    // Check for overlap: our meeting (with buffer) overlaps with existing event
+    // Convert event times to local time (Asia/Kolkata) for comparison
+    const eventStart = new Date(event.start.dateTime).getTime();
+    const eventEnd = new Date(event.end.dateTime).getTime();
+
     // Overlap occurs if: (our start) < (event end) AND (our end + buffer) > (event start)
     const hasOverlap = startTime < eventEnd && endTimeWithBuffer > eventStart;
-    
     if (hasOverlap) {
-      console.log(`Overlap detected with event: ${event.summary}`);
-      console.log(`Existing: ${new Date(eventStart).toLocaleString()} - ${new Date(eventEnd).toLocaleString()}`);
-      console.log(`Requested: ${new Date(startTime).toLocaleString()} - ${new Date(endTime).toLocaleString()}`);
-      console.log(`With Buffer: ${new Date(startTime).toLocaleString()} - ${new Date(endTimeWithBuffer).toLocaleString()}`);
       return false;
     }
   }
-  
   return true;
 }
 
@@ -291,7 +281,7 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
         `singleEvents=true&` +
         `orderBy=startTime`;
 
-     const result = await makeCalendarApiRequest(url, env);
+      const result = await makeCalendarApiRequest(url, env);
       const events = result.items || [];
 
       const recommendations: string[] = [];
@@ -314,7 +304,7 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
         for (
           let currentMinutes = startMinutes;
           currentMinutes <= endMinutes - totalBlockMinutes;
-          currentMinutes += totalBlockMinutes // Skip to next valid slot respecting buffer
+          currentMinutes += totalBlockMinutes
         ) {
           const startHour = Math.floor(currentMinutes / 60);
           const startMinute = currentMinutes % 60;
@@ -322,19 +312,17 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
           const endHour = Math.floor(endTotalMinutes / 60);
           const endMinute = endTotalMinutes % 60;
 
-          const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
-          const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
+          const slotStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00+05:30`;
+          const slotEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00+05:30`;
 
-          // Use shiftTimeBackwards530 for slot times in isTimeSlotAvailable
+          // Do NOT use shiftTimeBackwards530 for slot times, only for event times if needed for display
           if (isTimeSlotAvailable(events, slotStart, slotEnd, bufferMinutes)) {
-            const shiftedStart = shiftTimeBackwards530(slotStart);
-            const shiftedEnd = shiftTimeBackwards530(slotEnd);
-            const startFormatted = new Date(shiftedStart).toLocaleTimeString('en-IN', {
+            const startFormatted = new Date(slotStart).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
             });
-            const endFormatted = new Date(shiftedEnd).toLocaleTimeString('en-IN', {
+            const endFormatted = new Date(slotEnd).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'Asia/Kolkata'
@@ -1329,7 +1317,7 @@ server.tool(
 				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
 
-			//Build success response
+			//Build response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
 			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
