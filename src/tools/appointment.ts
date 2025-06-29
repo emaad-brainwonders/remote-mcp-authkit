@@ -433,21 +433,26 @@ server.tool(
         arr.indexOf(email) === index
       );
 
-      // Only declare these ONCE:
       const appointmentMinutes = 45;
       const bufferMinutes = 15;
-      const newStartDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
-      const newEndDateObj = new Date(newStartDateObj.getTime() + appointmentMinutes * 60 * 1000);
-      const shiftedStart = new Date(newStartDateObj.getTime() + 19800000);
-      const shiftedEnd = new Date(newEndDateObj.getTime() + 19800000);
+
+      // 5:30 forward shift ONLY here
+      const startDateObj = new Date(`${parsedDate}T${startTime}:00+05:30`);
+      const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
+
+      // Add 5:30 forward shift (in ms)
+      const shiftedStart = new Date(startDateObj.getTime() + 19800000);
+      const shiftedEnd = new Date(endDateObj.getTime() + 19800000);
+
       const startDateTime = shiftedStart.toISOString().slice(0, 19);
       const endDateTime = shiftedEnd.toISOString().slice(0, 19);
-      const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+
+      const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
       });
-      const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+      const displayEndTime = endDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
@@ -1141,67 +1146,60 @@ server.tool(
 				}
 			}
 
-			// --- Build new appointment times (apply 5:30 forward shift as in scheduleAppointment) ---
-			// Only declare these ONCE:
-			const appointmentMinutes = 45;
-			const bufferMinutes = 15;
-			const newStartDateObj = new Date(`${parsedNewDate}T${newStartTime}:00+05:30`);
-			const newEndDateObj = new Date(newStartDateObj.getTime() + appointmentMinutes * 60 * 1000);
-			const shiftedStart = new Date(newStartDateObj.getTime() + 19800000);
-			const shiftedEnd = new Date(newEndDateObj.getTime() + 19800000);
-			const startDateTime = shiftedStart.toISOString().slice(0, 19);
-			const endDateTime = shiftedEnd.toISOString().slice(0, 19);
-			const displayNewDate = formatDateForDisplay(parsedNewDate);
-			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
-				hour: '2-digit',
-				minute: '2-digit',
-				timeZone: 'Asia/Kolkata'
-			});
-			const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
-				hour: '2-digit',
-				minute: '2-digit',
-				timeZone: 'Asia/Kolkata'
-			});
-
 			//  Check availability for new time slot
 			if (checkAvailability) {
-				// Use the already declared newStartDateObj and newEndDateObj
+				const newStartDateObj = new Date(`${parsedNewDate}T${newStartTime}:00+05:30`);
+				const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
+				
+				// Check for conflicts on the new date
 				const dayStartTime = `${parsedNewDate}T00:00:00+05:30`;
 				const dayEndTime = `${parsedNewDate}T23:59:59+05:30`;
-
+				
 				const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
 					`timeMin=${encodeURIComponent(dayStartTime)}&` +
 					`timeMax=${encodeURIComponent(dayEndTime)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
-
+				
 				const checkResult = await makeCalendarApiRequest(checkUrl, env);
 				const existingEvents = (checkResult.items || []).filter((event: any) => 
 					event.id !== originalEvent.id && event.status !== 'cancelled'
 				);
-
+				
 				// Check for time conflicts
 				const newStart = newStartDateObj.getTime();
 				const newEnd = newEndDateObj.getTime();
-
+				
 				const hasConflict = existingEvents.some((event: any) => {
 					const eventStart = event.start?.dateTime || event.start?.date;
 					if (!eventStart) return false;
-
+					
 					const existingStart = new Date(eventStart).getTime();
 					let existingEnd = existingStart;
-
+					
 					if (event.end?.dateTime || event.end?.date) {
 						existingEnd = new Date(event.end.dateTime || event.end.date).getTime();
 					} else {
 						existingEnd = existingStart + 45 * 60 * 1000; // Default 45 minutes
 					}
-
+					
 					// Check for overlap
 					return (newStart < existingEnd && newEnd > existingStart);
 				});
-
+				
 				if (hasConflict) {
+					const displayNewDate = formatDateForDisplay(parsedNewDate);
+					const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+						hour: '2-digit',
+						minute: '2-digit',
+						timeZone: 'Asia/Kolkata'
+					});
+					const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+						hour: '2-digit',
+						minute: '2-digit',
+						timeZone: 'Asia/Kolkata'
+					});
+					
 					return {
 						content: [{
 							type: "text",
@@ -1228,12 +1226,27 @@ server.tool(
 			}
 
 			//Create new appointment first (safer approach)
-			const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
-			const newStartDateObj = new Date(`${newStartDateTime}+05:30`);
+			const newStartDateObj = new Date(`${parsedNewDate}T${newStartTime}:00+05:30`);
 			const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
-			
-			const today = getCurrentDate();
-			
+
+			// Apply 5:30 forward shift (as in scheduleAppointment)
+			const shiftedStart = new Date(newStartDateObj.getTime() + 19800000);
+			const shiftedEnd = new Date(newEndDateObj.getTime() + 19800000);
+
+			const startDateTime = shiftedStart.toISOString().slice(0, 19);
+			const endDateTime = shiftedEnd.toISOString().slice(0, 19);
+
+			const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+			const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Asia/Kolkata'
+			});
+
 			// Build description
 			const appointmentDetails = [
 				`👤 **Client Information:**`,
