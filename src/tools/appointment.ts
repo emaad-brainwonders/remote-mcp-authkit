@@ -259,10 +259,11 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
     return found;
 }
 // Helper function to convert IST to UTC
-function convertISTtoUTC(istDateString) {
+function convertISTtoUTC(istDateString: string): string {
   const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
   return new Date(new Date(istDateString).getTime() - istOffset).toISOString();
 }
+
 
  export function setupAppointmentTools(server: McpServer, env: any) {
 	
