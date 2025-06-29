@@ -1175,59 +1175,43 @@ server.tool(
 
 			//  Check availability for new time slot
 			if (checkAvailability) {
-				const newStartDateTime = `${parsedNewDate}T${newStartTime}:00`;
-				const newStartDateObj = new Date(`${newStartDateTime}+05:30`);
-				const newEndDateObj = new Date(newStartDateObj.getTime() + 45 * 60 * 1000);
-				
-				// Check for conflicts on the new date
+				// Use the already declared newStartDateObj and newEndDateObj
 				const dayStartTime = `${parsedNewDate}T00:00:00+05:30`;
 				const dayEndTime = `${parsedNewDate}T23:59:59+05:30`;
-				
+
 				const checkUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
 					`timeMin=${encodeURIComponent(dayStartTime)}&` +
 					`timeMax=${encodeURIComponent(dayEndTime)}&` +
 					`singleEvents=true&` +
 					`orderBy=startTime`;
-				
+
 				const checkResult = await makeCalendarApiRequest(checkUrl, env);
 				const existingEvents = (checkResult.items || []).filter((event: any) => 
 					event.id !== originalEvent.id && event.status !== 'cancelled'
 				);
-				
+
 				// Check for time conflicts
 				const newStart = newStartDateObj.getTime();
 				const newEnd = newEndDateObj.getTime();
-				
+
 				const hasConflict = existingEvents.some((event: any) => {
 					const eventStart = event.start?.dateTime || event.start?.date;
 					if (!eventStart) return false;
-					
+
 					const existingStart = new Date(eventStart).getTime();
 					let existingEnd = existingStart;
-					
+
 					if (event.end?.dateTime || event.end?.date) {
 						existingEnd = new Date(event.end.dateTime || event.end.date).getTime();
 					} else {
 						existingEnd = existingStart + 45 * 60 * 1000; // Default 45 minutes
 					}
-					
+
 					// Check for overlap
 					return (newStart < existingEnd && newEnd > existingStart);
 				});
-				
+
 				if (hasConflict) {
-					const displayNewDate = formatDateForDisplay(parsedNewDate);
-					const displayStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
-						hour: '2-digit',
-						minute: '2-digit',
-						timeZone: 'Asia/Kolkata'
-					});
-					const displayEndTime = newEndDateObj.toLocaleTimeString('en-IN', {
-						hour: '2-digit',
-						minute: '2-digit',
-						timeZone: 'Asia/Kolkata'
-					});
-					
 					return {
 						content: [{
 							type: "text",
