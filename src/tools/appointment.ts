@@ -273,8 +273,8 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
 
-      const startDateTime = `${parsedDate}T00:00:00+05:30`;
-      const endDateTime = `${parsedDate}T23:59:59+05:30`;
+      const startDateTime = `${parsedDate}T00:00:00`;
+      const endDateTime = `${parsedDate}T23:59:59`;
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
         `timeMin=${encodeURIComponent(startDateTime)}&` +
@@ -648,8 +648,8 @@ server.tool(
 					};
 				}
 				displayDate = formatDateForDisplay(parsedDate);
-				const startDateTime = `${parsedDate}T00:00:00+05:30`;
-				const endDateTime = `${parsedDate}T23:59:59+05:30`;
+				const startDateTime = `${parsedDate}T00:00:00`;
+				const endDateTime = `${parsedDate}T23:59:59`;
 				searchTimeWindow = `on ${displayDate}`;
 				
 				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
@@ -934,8 +934,8 @@ server.tool(
 					};
 				}
 				
-				const startDateTime = `${parsedCurrentDate}T00:00:00+05:30`;
-				const endDateTime = `${parsedCurrentDate}T23:59:59+05:30`;
+				const startDateTime = `${parsedCurrentDate}T00:00:00`;
+				const endDateTime = `${parsedCurrentDate}T23:59:59`;
 				searchTimeWindow = `on ${formatDateForDisplay(parsedCurrentDate)}`;
 				
 				const searchUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
@@ -1314,7 +1314,7 @@ server.tool(
 				throw new Error(`Failed to cancel original appointment: ${errorMsg}`);
 			}
 
-			//Build success response
+			//Build response
 			const displayNewDate = formatDateForDisplay(parsedNewDate);
 			const displayNewStartTime = newStartDateObj.toLocaleTimeString('en-IN', {
 				hour: '2-digit',
@@ -1445,5 +1445,4 @@ server.tool(
         }
     }
 );
-
-} 
+ }
