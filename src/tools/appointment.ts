@@ -492,12 +492,16 @@ server.tool(
 
       const fullDescription = appointmentDetails.join('\n');
 
+      // Add this line after extracting attendees:
+      const parsedAttendees = parseAttendeesInput(attendees);
+      const allAttendees = [userEmail, ...parsedAttendees];
+
       const event = {
         summary: `${summary} - ${userName}`,
         description: fullDescription,
         start: { dateTime: startDateTime, timeZone: "Asia/Kolkata" },
         end: { dateTime: endDateTime, timeZone: "Asia/Kolkata" },
-        attendees: allAttendees.map(email => ({ email })),
+        attendees: allAttendees.map((email: string) => ({ email })),
         reminders: sendReminder ? {
           useDefault: false,
           overrides: [
