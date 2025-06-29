@@ -163,6 +163,91 @@ function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: st
   }
   return true;
 }
+// Helper: Parse attendees from various input formats
+function parseAttendeesInput(attendees: any): string[] {Add commentMore actions
+	if (!attendees) return [];
+	
+	// If it's already an array
+	if (Array.isArray(attendees)) {
+		return attendees
+			.map(item => {
+				if (typeof item === 'string') return item;
+				if (typeof item === 'object' && item.email) return item.email;
+				return null;
+			})
+			.filter(Boolean) as string[];
+	}
+	
+	// If it's a string that looks like a JSON array
+	if (typeof attendees === 'string') {
+		try {
+			// Try to parse as JSON first
+			const parsed = JSON.parse(attendees);
+			return parseAttendeesInput(parsed);
+		} catch {
+			// If JSON parsing fails, treat as a single email or comma-separated emails
+			if (attendees.includes('@')) {
+				// Split by comma and clean up
+				return attendees
+					.split(',')
+					.map(email => email.trim())
+					.filter(email => email.includes('@'));
+			}
+		}
+	}
+	
+	return [];
+}
+
+// Helper: Make API request with better error handling
+async function makeCalendarApiRequest(url: string, env: any, options: RequestInit = {}): Promise<any> {
+	try {
+		const token = getAccessToken(env);
+		
+		const response = await fetch(url, {
+			...options,
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+				...options.headers,
+			},
+		});
+		
+		if (!response.ok) {
+			const errorBody = await response.text();
+			let errorMessage = `Google Calendar API error: ${response.status}`;
+			
+			try {
+				const errorJson = JSON.parse(errorBody);
+				if (errorJson.error?.message) {
+					errorMessage += ` - ${errorJson.error.message}`;
+				}
+			} catch {
+				errorMessage += ` - ${errorBody}`;
+			}
+			
+			throw new Error(errorMessage);
+		}
+		
+		return await response.json();
+	} catch (error) {
+		if (error instanceof Error) {
+			throw error;
+		}
+		throw new Error(`Unexpected error: ${String(error)}`);
+	}
+}
+
+function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { userName?: string, userEmail?: string, userPhone?: string }) {
+    let found = false;
+    // Match by summary (name)
+    if (userName && event.summary && event.summary.toLowerCase().includes(userName.toLowerCase())) found = true;
+    // Match by attendee email
+    if (userEmail && event.attendees && event.attendees.some((a: any) => a.email && a.email.toLowerCase() === userEmail.toLowerCase())) found = true;
+    // Match by phone in description
+    if (userPhone && event.description && event.description.includes(userPhone)) found = true;
+    return found;
+}
 export function setupAppointmentTools(server: McpServer, env: any) {
 
 // Recommend available appointment times (only available slots, no shift)
