@@ -39,7 +39,7 @@ interface ToolResponse {
 }
 
 // Database connection helper
-async function getConnection(): Promise<mysql.Connection> {
+async function getConnection() {
   try {
     const connection = await mysql.createConnection(DB_CONFIG);
     return connection;
@@ -50,7 +50,7 @@ async function getConnection(): Promise<mysql.Connection> {
 
 // Tool handler function
 async function handleGetReport(args: { client_identifier: string }): Promise<ToolResponse> {
-  let connection: mysql.Connection | null = null;
+  let connection: any = null;
   
   try {
     connection = await getConnection();
@@ -66,6 +66,7 @@ async function handleGetReport(args: { client_identifier: string }): Promise<Too
     const searchTerm = `%${args.client_identifier}%`;
     const clientId = isNaN(Number(args.client_identifier)) ? -1 : parseInt(args.client_identifier);
     
+    // Use execute method (should work with mysql2/promise)
     const [rows] = await connection.execute(query, [searchTerm, clientId]);
     const typedRows = rows as DatabaseRow[];
     
@@ -124,8 +125,7 @@ async function handleGetReport(args: { client_identifier: string }): Promise<Too
 
 // Export function to register the report tools
 export function registerReportTools(server: McpServer, env?: any): void {
-  server.addTool({
-    name: 'get_report_path',
+  server.tool('get_report_path', {
     description: 'Get report path from database by client name or client ID',
     inputSchema: {
       type: 'object',
