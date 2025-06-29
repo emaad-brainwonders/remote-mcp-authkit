@@ -448,11 +448,11 @@ server.tool(
       const bufferMinutes = 15;
 
       // Create proper date objects with timezone
-      const startDateObj = new Date(`${parsedDate}T${startTime}:00`);
+      const startDateObj = new Date(`${parsedDate}T${startTime}:00Z`);
       const endDateObj = new Date(startDateObj.getTime() + appointmentMinutes * 60 * 1000);
 
-      const startDateTime = startDateObj.toISOString().slice(0, 19);
-      const endDateTime = endDateObj.toISOString().slice(0, 19);
+      const startDateTime = startDateObj.toISOString();
+      const endDateTime = endDateObj.toISOString();
 
       const displayStartTime = startDateObj.toLocaleTimeString('en-IN', {
         hour: '2-digit',
