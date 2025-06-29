@@ -273,8 +273,8 @@ function eventMatchesUser(event: any, { userName, userEmail, userPhone }: { user
       const parsedDate = parseRelativeDate(date);
       const displayDate = formatDateForDisplay(parsedDate);
 
-      const startDateTime = `${parsedDate}T00:00:00`;
-      const endDateTime = `${parsedDate}T23:59:59`;
+      const startDateTime = new Date(`${parsedDate}T00:00:00+05:30`).toISOString();
+      const endDateTime = new Date(`${parsedDate}T23:59:59+05:30`).toISOString();
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
         `timeMin=${encodeURIComponent(startDateTime)}&` +
