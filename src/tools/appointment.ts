@@ -318,8 +318,6 @@ server.tool(
       const result = await makeCalendarApiRequest(url, env);
       const events = result.items || [];
 
-      // ... rest of your existing code remains the same ...
-      const recommendations: string[] = [];
       const workingHours = [
         { start: 9, end: 12, period: 'Morning' },
         { start: 14, end: 17, period: 'Afternoon' }
@@ -329,8 +327,8 @@ server.tool(
       const bufferMinutes = 15;
       const totalBlockMinutes = appointmentMinutes + bufferMinutes;
 
-      let morningSlots: string[] = [];
-      let afternoonSlots: string[] = [];
+      let morningSlots = [];
+      let afternoonSlots = [];
 
       for (const period of workingHours) {
         const startMinutes = period.start * 60;
@@ -347,11 +345,12 @@ server.tool(
           const endHour = Math.floor(endTotalMinutes / 60);
           const endMinute = endTotalMinutes % 60;
 
-          // Create UTC times for slot checking, then convert to IST for display
-          const slotStartUTC = new Date(new Date(`${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`).getTime() - istOffset).toISOString();
-          const slotEndUTC = new Date(new Date(`${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`).getTime() - istOffset).toISOString();
+          // Create meeting time strings for the helper function
+          const meetingStart = `${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+          const meetingEnd = `${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
 
-          if (isTimeSlotAvailable(events, slotStartUTC, slotEndUTC, bufferMinutes)) {
+          // Use the existing helper function
+          if (isTimeSlotAvailable(events, meetingStart, meetingEnd, bufferMinutes)) {
             // Create IST time objects for display formatting
             const startIST = new Date(`${parsedDate}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`);
             const endIST = new Date(`${parsedDate}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`);
