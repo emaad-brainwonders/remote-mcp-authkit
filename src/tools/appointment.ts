@@ -147,7 +147,7 @@ function shiftTimeBackwards530(dateTimeIso: string): string {
     return shifted.toISOString().slice(0, 19);
 }
 
-// Helper: Check if a time slot is available (NO 5:30 shift applied to slot times, only to event times)
+// Helper: Check if a time slot is available (NO 5:30 shift applied to slot times)
 function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: string, bufferMinutes = 15): boolean {
   // meetingStart and meetingEnd are in local time (Asia/Kolkata)
   const startTime = new Date(meetingStart).getTime();
@@ -159,7 +159,7 @@ function isTimeSlotAvailable(events: any[], meetingStart: string, meetingEnd: st
     if (!event.start?.dateTime || !event.end?.dateTime) {
       continue;
     }
-    // Convert event times to local time (Asia/Kolkata) for comparison
+    // Compare in local time (Asia/Kolkata)
     const eventStart = new Date(event.start.dateTime).getTime();
     const eventEnd = new Date(event.end.dateTime).getTime();
 
@@ -475,8 +475,8 @@ server.tool(
         const checkResult = await makeCalendarApiRequest(checkUrl, env);
         const existingEvents = checkResult.items || [];
 
-        // Use shiftTimeBackwards530 for slot times in isTimeSlotAvailable
-        if (!isTimeSlotAvailable(existingEvents, shiftTimeBackwards530(startDateTime), shiftTimeBackwards530(endDateTime))) {
+        // Do NOT use shiftTimeBackwards530 for slot times in isTimeSlotAvailable
+        if (!isTimeSlotAvailable(existingEvents, `${parsedDate}T${startTime}:00+05:30`, endDateObj.toISOString(), bufferMinutes)) {
           return {
             content: [
               {
