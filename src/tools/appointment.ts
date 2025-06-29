@@ -289,10 +289,13 @@ server.tool(
       
       const displayDate = formatDateForDisplay(parsedDate);
 
-      // Convert IST to UTC for API call
-      const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-      const startUTC = new Date(new Date(`${parsedDate}T00:00:00`).getTime() - istOffset).toISOString();
-      const endUTC = new Date(new Date(`${parsedDate}T23:59:59`).getTime() - istOffset).toISOString();
+      // Properly convert IST to UTC for API call
+      // Create dates in IST timezone, then convert to UTC
+      const startIST = new Date(`${parsedDate}T00:00:00+05:30`);
+      const endIST = new Date(`${parsedDate}T23:59:59+05:30`);
+      
+      const startUTC = startIST.toISOString();
+      const endUTC = endIST.toISOString();
       
       console.log('Original date input:', date);
       console.log('Parsed date:', parsedDate);
