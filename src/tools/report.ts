@@ -3,11 +3,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Database configuration
 const DB_CONFIG = {
-  host: 'ls-88ff1aa05e7d04e62a925bf4fd2b33f1b050d027.cifqbroovvmr.ap-south-1.rds.amazonaws.com',
-  port: 3306,
-  user: 'dbadmin',
-  password: 'mFyW^(5mVR9SAxzcN((^e1MykGd#$_js',
-  database: 'franchises'
+  host: '',
+  port: 1,
+  user: '',
+  password: '',
+  database: ''
 };
 
 // Type definitions
