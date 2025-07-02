@@ -67,18 +67,19 @@ export function registerReportTools(server: McpServer, env?: any): void {
       type: "object",
       properties: {
         client_id: { 
-          type: "number", 
-          description: "The client/user ID to search reports for (e.g., when asked for 'user id 10000', use client_id: 10000)" 
+          type: "string", // Changed from "number" to "string"
+          description: "The client/user ID to search reports for (e.g., when asked for 'user id 10000', use client_id: '10000')" 
         }
       },
       required: ["client_id"]
     }
   }, async (args: any) => {
     try {
-      const clientId = typeof args.client_id === 'string' ? parseInt(args.client_id) : args.client_id;
+      // Parse the string to number
+      const clientId = parseInt(args.client_id);
       
       if (!clientId || isNaN(clientId)) {
-        return { content: [{ type: 'text', text: 'Error: Please provide a valid client ID (numeric value)' }] };
+        return { content: [{ type: 'text', text: `Error: Please provide a valid client ID (numeric value). Received: ${args.client_id}` }] };
       }
 
       const endpoint = `/api/report-path?client_id=${clientId}&limit=10`;
@@ -113,7 +114,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
       type: "object",
       properties: {
         id: { 
-          type: "number", 
+          type: "string", // Changed from "number" to "string"
           description: "The unique report ID (obtained from search_reports results)" 
         }
       },
@@ -121,10 +122,11 @@ export function registerReportTools(server: McpServer, env?: any): void {
     }
   }, async (args: any) => {
     try {
-      const id = typeof args.id === 'string' ? parseInt(args.id) : args.id;
+      // Parse the string to number
+      const id = parseInt(args.id);
       
       if (!id || isNaN(id)) {
-        return { content: [{ type: 'text', text: 'Error: Please provide a valid report ID (numeric value)' }] };
+        return { content: [{ type: 'text', text: `Error: Please provide a valid report ID (numeric value). Received: ${args.id}` }] };
       }
 
       const response = await apiCall(`/api/report-path/${id}`, SingleReportResponseSchema);
@@ -157,6 +159,4 @@ export function registerReportTools(server: McpServer, env?: any): void {
       };
     }
   });
-
-
 }
