@@ -1,80 +1,58 @@
-// Try this format if your LLM expects OpenAI function calling format
-export function registerReportPathToolOpenAI(server: McpServer): void {
-  
-  server.tool("get_report_path", {
-    description: "Get report path for a client ID. Call this when user asks for reports for a specific client ID or user ID.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        client_id: { 
-          type: "string",
-          description: "The client ID number as a string (e.g., '10000', '1001', '5555')" 
-        }
-      },
-      required: ["client_id"],
-      additionalProperties: false
-    }
-  }, async (args: any) => {
-    console.log("get_report_path called with args:", args); // Add logging
-    
-    try {
-      const clientId = parseInt(args.client_id);
-      
-      if (!clientId || isNaN(clientId)) {
-        return { 
-          content: [{ 
-            type: 'text', 
-            text: `Error: Invalid client ID "${args.client_id}". Please provide a numeric value.` 
-          }] 
-        };
-      }
+import OAuthProvider from "@cloudflare/workers-oauth-provider";
+import { McpAgent } from "agents/mcp";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { AuthkitHandler } from "./authkit-handler";
+import type { Props } from "./props";
+import { registerDateTool } from "./tools/date";
+import { setupAppointmentTools } from "./tools/appointment";
+import { registerEmailTools } from "./tools/mail";
+import { CalendarReminderService } from "./automation/calendarreminder";
+import { registerReportTools } from "./tools/report";
 
-      console.log(`Fetching reports for client ID: ${clientId}`); // Add logging
+// Define the Env type to match wrangler.json bindings
+type Env = { 
+  AI: any;
+  GOOGLE_ACCESS_TOKEN: string;
+  WORKOS_CLIENT_ID: string;
+  WORKOS_CLIENT_SECRET: string;
+  OAUTH_KV: KVNamespace;
+  MCP_OBJECT: DurableObjectNamespace;
+};
 
-      const response = await fetch(`https://dimt-api.onrender.com/api/report-path?client_id=${clientId}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`API Error: ${response.status} - ${errorText}`); // Add logging
-        return { 
-          content: [{ 
-            type: 'text', 
-            text: `API Error: ${response.status} - ${response.statusText}` 
-          }] 
-        };
-      }
-
-      const data = await response.json();
-      console.log("API Response:", data); // Add logging
-      
-      if (data.count === 0) {
-        return { 
-          content: [{ 
-            type: 'text', 
-            text: `No reports found for client ID: ${clientId}` 
-          }] 
-        };
-      }
-
-      const pathInfo = data.data.map((report: any) => 
-        `Client: ${report.ClientName} (ID: ${report.ClientID})\nReport Path: ${report.ReportPath}`
-      ).join('\n\n');
-
-      return {
-        content: [{
-          type: 'text',
-          text: `Found ${data.count} report(s) for client ID ${clientId}:\n\n${pathInfo}`
-        }]
-      };
-
-    } catch (error) {
-      console.error("Tool execution error:", error); // Add logging
-      return {
-        content: [{
-          type: 'text',
-          text: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
-        }]
-      };
-    }
+export class MyMCP extends McpAgent<Env, unknown, Props> {
+  server = new McpServer({
+    name: "MCP server demo using AuthKit",
+    version: "1.0.0",
   });
+
+  private reminderService: CalendarReminderService | null = null;
+
+  async init() {
+    // Register tools directly
+    registerDateTool(this.server);
+    setupAppointmentTools(this.server, this.env);
+    registerEmailTools(this.server);
+    registerReportTools(this.server);
+
+    // Initialize and start the calendar reminder service
+    this.reminderService = new CalendarReminderService(this.env);
+    await this.reminderService.startReminderAutomation();
+  }
+
+  // Clean up when the server shuts down
+  async cleanup() {
+    if (this.reminderService) {
+      await this.reminderService.cleanup();
+      this.reminderService = null;
+    }
+  }
 }
+
+export default new OAuthProvider({
+  apiRoute: "/sse",
+  apiHandler: MyMCP.mount("/sse") as any,
+  defaultHandler: AuthkitHandler as any,
+  authorizeEndpoint: "/authorize",
+  tokenEndpoint: "/token",
+  clientRegistrationEndpoint: "/register",
+});
