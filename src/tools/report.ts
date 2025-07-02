@@ -63,8 +63,23 @@ export function registerReportTools(server: McpServer): void {
         };
       }
 
-      const data = await response.json();
-      console.log("API Response:", data); // Add logging
+      const rawData = await response.json();
+      console.log("API Response:", rawData); // Add logging
+      
+      // Validate the response data using Zod schema
+      const parseResult = ApiResponseSchema.safeParse(rawData);
+      
+      if (!parseResult.success) {
+        console.log("Schema validation failed:", parseResult.error); // Add logging
+        return { 
+          content: [{ 
+            type: 'text', 
+            text: `Error: Invalid API response format - ${parseResult.error.message}` 
+          }] 
+        };
+      }
+
+      const data = parseResult.data;
       
       if (data.count === 0) {
         return { 
@@ -75,7 +90,7 @@ export function registerReportTools(server: McpServer): void {
         };
       }
 
-      const pathInfo = data.data.map((report: any) => 
+      const pathInfo = data.data.map((report) => 
         `Client: ${report.ClientName} (ID: ${report.ClientID})\nReport Path: ${report.ReportPath}`
       ).join('\n\n');
 
