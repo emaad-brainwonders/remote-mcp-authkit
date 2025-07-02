@@ -62,7 +62,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
   
   // Search reports by client ID
   server.tool("search_reports", {
-    description: "Search for reports by client/user ID. Use this when someone asks to 'get report for user id X' or 'find reports for client X'. Returns a list of all reports belonging to that client/user with report details.",
+    description: "Search for reports by client/user ID. Use this when someone asks to 'get report for user id X', 'find reports for client X', or 'get me the report for client with id X'. Returns a list of all reports belonging to that client/user with report details.",
     inputSchema: {
       type: "object",
       properties: {
@@ -109,7 +109,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
 
   // Get specific report by unique ID
   server.tool("get_report", {
-    description: "Get detailed information about a specific report using its unique report ID. Returns comprehensive report details including client info, file paths, upload time, and statistical data (ADC, RADC, RAGC, AGC, RC values).",
+    description: "Get detailed information about a specific report using its unique report ID (NOT client ID). Use this only when you have a specific report's unique ID from search_reports results. For client-based searches, use search_reports instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -155,6 +155,53 @@ export function registerReportTools(server: McpServer, env?: any): void {
         content: [{
           type: 'text',
           text: `Error retrieving report: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
+        }]
+      };
+    }
+  });
+
+  // Combined tool for getting reports by client ID (more user-friendly)
+  server.tool("get_client_reports", {
+    description: "Get all reports for a specific client/user ID. Use this when someone asks 'get me the report for client with ID X' or 'get reports for user ID X'. This is the preferred tool for client-based report requests.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        client_id: { 
+          type: "string",
+          description: "The client/user ID to get reports for (e.g., '10000')" 
+        }
+      },
+      required: ["client_id"]
+    }
+  }, async (args: any) => {
+    try {
+      // Parse the string to number
+      const clientId = parseInt(args.client_id);
+      
+      if (!clientId || isNaN(clientId)) {
+        return { content: [{ type: 'text', text: `Error: Please provide a valid client ID (numeric value). Received: ${args.client_id}` }] };
+      }
+
+      const endpoint = `/api/report-path?client_id=${clientId}&limit=10`;
+      
+      const response = await apiCall(endpoint, ApiResponseSchema);
+      
+      if (response.count === 0) {
+        return { content: [{ type: 'text', text: `No reports found for client ID: ${clientId}` }] };
+      }
+
+      const reports = response.data.map(formatReport).join('\n\n---\n\n');
+      return {
+        content: [{
+          type: 'text',
+          text: `Found ${response.count} report(s) for client ID "${clientId}":\n\n${reports}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error getting client reports: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
         }]
       };
     }
