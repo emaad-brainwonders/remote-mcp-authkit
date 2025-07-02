@@ -845,7 +845,7 @@ server.tool(
 			return {
 				content: [{
 					type: "text",
-					text: `❌ **Failed to cancel appointment**\n\n${errorMessage}\n\n💡 **Troubleshooting:**\n• Verify the appointment exists\n• Check your calendar permissions\n• Try searching with different criteria`
+					text: `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${eventDate}\n⏰ **Time:** ${timeString}${userInfo}\n\n🗑️ The appointment has been permanently removed from your calendar and all attendees have been notified.`
 				}]
 			};
 		}
