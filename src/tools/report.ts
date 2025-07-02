@@ -60,13 +60,16 @@ function formatReport(report: z.infer<typeof ReportSchema>): string {
 
 export function registerReportTools(server: McpServer, env?: any): void {
   
-  // Search reports
+  // Search reports by client ID
   server.tool("search_reports", {
-    description: "Search for client reports by client ID",
+    description: "Search for client reports by client ID. Returns a list of reports with details like report path, PDF path, upload date, and unique ID for each report belonging to the specified client.",
     inputSchema: {
       type: "object",
       properties: {
-        client_id: { type: "number", description: "Client ID" }
+        client_id: { 
+          type: "number", 
+          description: "The client ID to search reports for (e.g., 10000)" 
+        }
       },
       required: ["client_id"]
     }
@@ -75,7 +78,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
       const clientId = typeof args.client_id === 'string' ? parseInt(args.client_id) : args.client_id;
       
       if (!clientId || isNaN(clientId)) {
-        return { content: [{ type: 'text', text: 'Error: Please provide a valid client ID' }] };
+        return { content: [{ type: 'text', text: 'Error: Please provide a valid client ID (numeric value)' }] };
       }
 
       const endpoint = `/api/report-path?client_id=${clientId}&limit=10`;
@@ -97,19 +100,22 @@ export function registerReportTools(server: McpServer, env?: any): void {
       return {
         content: [{
           type: 'text',
-          text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          text: `Error searching reports: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
         }]
       };
     }
   });
 
-  // Get report by ID
+  // Get specific report by unique ID
   server.tool("get_report", {
-    description: "Get specific report by unique ID",
+    description: "Get detailed information about a specific report using its unique report ID. Returns comprehensive report details including client info, file paths, upload time, and statistical data (ADC, RADC, RAGC, AGC, RC values).",
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "number", description: "Unique report ID" }
+        id: { 
+          type: "number", 
+          description: "The unique report ID (obtained from search_reports results)" 
+        }
       },
       required: ["id"]
     }
@@ -118,7 +124,7 @@ export function registerReportTools(server: McpServer, env?: any): void {
       const id = typeof args.id === 'string' ? parseInt(args.id) : args.id;
       
       if (!id || isNaN(id)) {
-        return { content: [{ type: 'text', text: 'Error: Please provide a valid report ID' }] };
+        return { content: [{ type: 'text', text: 'Error: Please provide a valid report ID (numeric value)' }] };
       }
 
       const response = await apiCall(`/api/report-path/${id}`, SingleReportResponseSchema);
@@ -133,7 +139,12 @@ export function registerReportTools(server: McpServer, env?: any): void {
         `**File Path:** ${r.FilePath}`,
         `**Uploaded:** ${formatDate(r.UploadTime)}`,
         `**Count:** ${r.Count}`,
-        `**Stats:** ADC: ${r.adc}, RADC: ${r.radc}, RAGC: ${r.ragc}, AGC: ${r.agc}, RC: ${r.rc}`
+        `**Statistical Data:**`,
+        `  - ADC: ${r.adc}`,
+        `  - RADC: ${r.radc}`,
+        `  - RAGC: ${r.ragc}`,
+        `  - AGC: ${r.agc}`,
+        `  - RC: ${r.rc}`
       ].join('\n');
 
       return { content: [{ type: 'text', text: details }] };
@@ -141,9 +152,11 @@ export function registerReportTools(server: McpServer, env?: any): void {
       return {
         content: [{
           type: 'text',
-          text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          text: `Error retrieving report: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
         }]
       };
     }
   });
+
+
 }
