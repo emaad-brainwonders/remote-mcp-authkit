@@ -62,13 +62,13 @@ export function registerReportTools(server: McpServer, env?: any): void {
   
   // Search reports by client ID
   server.tool("search_reports", {
-    description: "Search for client reports by client ID. Returns a list of reports with details like report path, PDF path, upload date, and unique ID for each report belonging to the specified client.",
+    description: "Search for reports by client/user ID. Use this when someone asks to 'get report for user id X' or 'find reports for client X'. Returns a list of all reports belonging to that client/user with report details.",
     inputSchema: {
       type: "object",
       properties: {
         client_id: { 
           type: "number", 
-          description: "The client ID to search reports for (e.g., 10000)" 
+          description: "The client/user ID to search reports for (e.g., when asked for 'user id 10000', use client_id: 10000)" 
         }
       },
       required: ["client_id"]
