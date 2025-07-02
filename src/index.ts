@@ -32,7 +32,7 @@ export class MyMCP extends McpAgent<Env, unknown, Props> {
     registerDateTool(this.server);
     setupAppointmentTools(this.server, this.env);
     registerEmailTools(this.server);
-    registerReportTools(this.server, this.env);
+    registerReportTools(this.server);
 
     // Initialize and start the calendar reminder service
     this.reminderService = new CalendarReminderService(this.env);
