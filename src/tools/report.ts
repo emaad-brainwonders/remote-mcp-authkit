@@ -1,23 +1,4 @@
 import { z } from 'zod';
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-
-const API_BASE_URL = 'https://dimt-api.onrender.com';
-
-// Simple schema for report path response
-const ReportPathSchema = z.object({
-  uniqueid: z.number(),
-  ReportPath: z.string(),
-  ClientName: z.string(),
-  ClientID: z.number(),
-});
-
-const ApiResponseSchema = z.object({
-  message: z.string(),
-  data: z.array(ReportPathSchema),
-  count: z.number(),
-});
-
-import { z } from 'zod';
 
 export function registerReportTools(server: any) {
   server.tool(
