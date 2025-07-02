@@ -1,5 +1,24 @@
+import { z } from 'zod';
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+const API_BASE_URL = 'https://dimt-api.onrender.com';
+
+// Simple schema for report path response
+const ReportPathSchema = z.object({
+  uniqueid: z.number(),
+  ReportPath: z.string(),
+  ClientName: z.string(),
+  ClientID: z.number(),
+});
+
+const ApiResponseSchema = z.object({
+  message: z.string(),
+  data: z.array(ReportPathSchema),
+  count: z.number(),
+});
+
 // Try this format if your LLM expects OpenAI function calling format
-export function registerReportPathToolOpenAI(server: McpServer): void {
+export function registerReportTools(server: McpServer): void {
   
   server.tool("get_report_path", {
     description: "Get report path for a client ID. Call this when user asks for reports for a specific client ID or user ID.",
