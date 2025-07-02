@@ -1,5 +1,17 @@
 import { z } from 'zod';
 
+// Define types for the API response
+interface ReportData {
+  ClientName: string;
+  ClientID: number;
+  ReportPath: string;
+}
+
+interface ApiResponse {
+  count: number;
+  data: ReportData[];
+}
+
 export function registerReportTools(server: any) {
   server.tool(
     "get_report_path",
@@ -7,7 +19,7 @@ export function registerReportTools(server: any) {
     {
       client_id: z.string().describe("The client ID number as a string (e.g., '10000', '1001', '5555')")
     },
-    async ({ client_id }) => {
+    async ({ client_id }: { client_id: string }) => {
       try {
         const clientId = parseInt(client_id);
         
@@ -33,7 +45,7 @@ export function registerReportTools(server: any) {
           };
         }
 
-        const data = await response.json();
+        const data: ApiResponse = await response.json();
         
         if (data.count === 0) {
           return { 
@@ -44,7 +56,7 @@ export function registerReportTools(server: any) {
           };
         }
 
-        const pathInfo = data.data.map((report: any) => 
+        const pathInfo = data.data.map((report: ReportData) => 
           `Client: ${report.ClientName} (ID: ${report.ClientID})\nReport Path: ${report.ReportPath}`
         ).join('\n\n');
 
