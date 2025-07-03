@@ -845,7 +845,7 @@ server.tool(
 			return {
 				content: [{
 					type: "text",
-					text: `✅ **Appointment cancelled successfully!**\n\n📋 **Cancelled Event:** ${eventToCancel.summary}\n📅 **Date:** ${eventDate}\n⏰ **Time:** ${timeString}${userInfo}\n\n🗑️ The appointment has been permanently removed from your calendar and all attendees have been notified.`
+					text: `✅ **Appointment cancelled successfully!**\n\n📋 `
 				}]
 			};
 		}
