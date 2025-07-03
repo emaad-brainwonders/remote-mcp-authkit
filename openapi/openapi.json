@@ -1,0 +1,70 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MCP Appointment Tools",
+    "version": "1.0.0",
+    "description": "API for scheduling and managing appointments via Google Calendar"
+  },
+  "servers": [
+    {
+      "url": "https://remote-mcp-authkit.emaad-brainwonders.workers.dev"
+    }
+  ],
+  "paths": {
+    "/schedule": {
+      "post": {
+        "summary": "Schedule an appointment",
+        "operationId": "scheduleAppointment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["attendeeEmail", "date", "time", "title"],
+                "properties": {
+                  "attendeeEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "time": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
