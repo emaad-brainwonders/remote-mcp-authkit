@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { parseRelativeDate, formatDateForDisplay, makeCalendarApiRequest, isTimeSlotAvailable } from "./appointment";
+import {getAccessToken, formatDateToString, getCurrentDate, formatDateForDisplay, parseRelativeDate, validateTimeFormat, isTimeSlotAvailable, parseAttendeesInput, shiftTimeBackwards530, makeCalendarApiRequest, eventMatchesUser} from "./appointment";
+
 
 export function registerRecommendAppointmentTimesTool(server: McpServer, env: any) {
   server.tool(
