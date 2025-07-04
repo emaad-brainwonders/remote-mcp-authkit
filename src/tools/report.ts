@@ -63,10 +63,20 @@ export function registerReportTools(server: any) {
           };
         }
 
-        // Validate and sanitize inputs
-        const cleanPhone = phone?.trim();
-        const cleanEmail = email?.trim();
-        const searchLimit = Math.min(Math.max(limit, 1), 100); // Ensure limit is between 1 and 100
+        // Clean and validate inputs - Fix the null string issue
+        const cleanPhone = phone?.trim() === 'null' ? undefined : phone?.trim();
+        const cleanEmail = email?.trim() === 'null' ? undefined : email?.trim();
+        const searchLimit = Math.min(Math.max(limit, 1), 100);
+
+        // Validate that we still have at least one contact method after cleaning
+        if (!cleanPhone && !cleanEmail) {
+          return { 
+            content: [{ 
+              type: 'text', 
+              text: 'Error: Either phone number or email address is required to search for reports.' 
+            }] 
+          };
+        }
 
         // Build query parameters
         const queryParams = new URLSearchParams();
@@ -74,16 +84,26 @@ export function registerReportTools(server: any) {
         if (cleanEmail) queryParams.append('email', cleanEmail);
         queryParams.append('limit', searchLimit.toString());
 
+        const apiUrl = `https://dimt-api.onrender.com/api/user-reports-by-contact?${queryParams}`;
+        
+        console.log(`API URL: ${apiUrl}`);
         console.log(`Searching for reports with contact info - Phone: ${cleanPhone || 'Not provided'}, Email: ${cleanEmail || 'Not provided'}`);
 
-        const response = await fetch(`https://dimt-api.onrender.com/api/user-reports-by-contact?${queryParams}`);
+        const response = await fetch(apiUrl);
+        
+        // Log response details for debugging
+        console.log(`Response status: ${response.status}`);
+        console.log(`Response headers:`, Object.fromEntries(response.headers.entries()));
         
         if (!response.ok) {
+          const errorText = await response.text();
+          console.log(`Error response body: ${errorText}`);
+          
           if (response.status === 404) {
             return { 
               content: [{ 
                 type: 'text', 
-                text: `No user found with the provided contact information.${cleanPhone ? `\nPhone: ${cleanPhone}` : ''}${cleanEmail ? `\nEmail: ${cleanEmail}` : ''}` 
+                text: `No user found with the provided contact information.${cleanPhone ? `\nPhone: ${cleanPhone}` : ''}${cleanEmail ? `\nEmail: ${cleanEmail}` : ''}\n\nAPI URL: ${apiUrl}` 
               }] 
             };
           }
@@ -91,18 +111,31 @@ export function registerReportTools(server: any) {
           return { 
             content: [{ 
               type: 'text', 
-              text: `API Error: ${response.status} - ${response.statusText}` 
+              text: `API Error: ${response.status} - ${response.statusText}\nResponse: ${errorText}\nAPI URL: ${apiUrl}` 
             }] 
           };
         }
 
-        const data: ApiResponse = await response.json();
+        const responseText = await response.text();
+        console.log(`Response body: ${responseText}`);
+        
+        let data: ApiResponse;
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          return { 
+            content: [{ 
+              type: 'text', 
+              text: `Failed to parse API response: ${parseError}\nRaw response: ${responseText}` 
+            }] 
+          };
+        }
         
         if (data.clients_found === 0) {
           return { 
             content: [{ 
               type: 'text', 
-              text: `No users found with the provided contact information.${cleanPhone ? `\nPhone: ${cleanPhone}` : ''}${cleanEmail ? `\nEmail: ${cleanEmail}` : ''}` 
+              text: `No users found with the provided contact information.${cleanPhone ? `\nPhone: ${cleanPhone}` : ''}${cleanEmail ? `\nEmail: ${cleanEmail}` : ''}\n\nAPI returned: ${JSON.stringify(data, null, 2)}` 
             }] 
           };
         }
@@ -148,10 +181,46 @@ export function registerReportTools(server: any) {
         };
 
       } catch (error) {
+        console.error('Tool error:', error);
         return {
           content: [{
             type: 'text',
             text: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred while searching for reports'}`
+          }]
+        };
+      }
+    }
+  );
+
+  // Add a new diagnostic tool to test the API directly
+  server.tool(
+    "test_api_directly",
+    "Test the API directly to see what data is available",
+    {
+      endpoint: z.string().optional().default("user-reports-by-contact").describe("API endpoint to test"),
+      params: z.string().optional().describe("Query parameters as a string (e.g., 'phone=123&email=test@example.com')")
+    },
+    async ({ endpoint = "user-reports-by-contact", params }: { endpoint?: string; params?: string }) => {
+      try {
+        const baseUrl = "https://dimt-api.onrender.com/api";
+        const fullUrl = params ? `${baseUrl}/${endpoint}?${params}` : `${baseUrl}/${endpoint}`;
+        
+        console.log(`Testing API directly: ${fullUrl}`);
+        
+        const response = await fetch(fullUrl);
+        const responseText = await response.text();
+        
+        return {
+          content: [{
+            type: 'text',
+            text: `API Test Results:\nURL: ${fullUrl}\nStatus: ${response.status}\nHeaders: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}\nResponse: ${responseText}`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `API Test Error: ${error instanceof Error ? error.message : 'Unknown error'}`
           }]
         };
       }
